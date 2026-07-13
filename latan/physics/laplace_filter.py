@@ -1,8 +1,10 @@
-from typing import Sequence
+from typing import Sequence, Tuple
 
 import numpy as np
 import numpy.typing as npt
 from numba import njit
+
+from latan.statistics.correlation import var_to_corr
 
 
 @njit(cache=True)
@@ -78,3 +80,36 @@ def lfilter(
                 src = dest
                 dest = buf if dest is out else out
     return out
+
+
+class LaplaceFilteredT2:
+    _range: Tuple[int, int]
+    _slice: slice
+    _data: npt.NDArray
+    _var: npt.NDArray
+    _data_buf: npt.NDArray
+    _var_buf: npt.NDArray
+    _n_state: int
+
+    def __init__(self, data: npt.NDArray, range: Tuple[int, int], n_state: int) -> None:
+        self._range = range
+        self._slice = slice(*range)
+        self._data = data.mean(axis=0)
+        self._var = np.cov(data, rowvar=False) / data.shape[0]
+        self._n_state = n_state
+        self._data_buf = np.empty_like(self._data)
+        self._var_buf = np.empty_like(self._var)
+
+    @property
+    def range(self) -> Tuple[int, int]:
+        return self._range
+
+    def __call__(self, lamb: npt.NDArray) -> float:
+        lfilter(self._data, lamb, out=self._data_buf)
+        lfilter(self._var, lamb, dim=(0, 1), out=self._var_buf)
+        data_f = self._data_buf[self._slice]
+        var_f = self._var_buf[self._slice, self._slice]
+        corr, err = var_to_corr(var_f)
+        data_f /= err
+        t2 = (data_f @ np.linalg.solve(corr, data_f)).item()
+        return t2

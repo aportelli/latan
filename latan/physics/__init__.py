@@ -1,3 +1,3 @@
-from latan.physics.laplace_filter import (lfilter,)
+from latan.physics.laplace_filter import (LaplaceFilteredT2, lfilter,)
 
-__all__ = ['lfilter']
+__all__ = ['LaplaceFilteredT2', 'lfilter']
