@@ -11,3 +11,6 @@ wheels/
 
 # Temporary data
 /notebooks/*.h5
+
+# VSCode
+.vscode
