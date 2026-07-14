@@ -1,8 +1,12 @@
-from typing import Sequence, Tuple
+import math
+from dataclasses import dataclass, field
+from typing import List, Sequence, Tuple
 
 import numpy as np
 import numpy.typing as npt
+from iminuit import Minuit
 from numba import njit
+from scipy import stats
 
 from latan.statistics.correlation import var_to_corr
 
@@ -82,34 +86,139 @@ def lfilter(
     return out
 
 
+def lfilter_tilde(e):
+    return np.sqrt(2.0 * (np.cosh(e) - 1.0))
+
+
+def lfilter_tilde_inv(lamb):
+    return 2.0 * np.arcsinh(lamb / 2.0)
+
+
 class LaplaceFilteredT2:
     _range: Tuple[int, int]
     _slice: slice
-    _data: npt.NDArray
-    _var: npt.NDArray
-    _data_buf: npt.NDArray
-    _var_buf: npt.NDArray
+    _mean: npt.NDArray
+    _cov: npt.NDArray
+    _mean_buf: npt.NDArray
+    _cov_buf: npt.NDArray
     _n_state: int
 
-    def __init__(self, data: npt.NDArray, range: Tuple[int, int], n_state: int) -> None:
+    def __init__(
+        self, mean: npt.NDArray, cov: npt.NDArray, range: Tuple[int, int], n_state: int
+    ) -> None:
         self._range = range
         self._slice = slice(*range)
-        self._data = data.mean(axis=0)
-        self._var = np.cov(data, rowvar=False) / data.shape[0]
+        self._mean = mean
+        self._cov = cov
         self._n_state = n_state
-        self._data_buf = np.empty_like(self._data)
-        self._var_buf = np.empty_like(self._var)
+        self._mean_buf = np.empty_like(self._mean)
+        self._cov_buf = np.empty_like(self._cov)
 
     @property
     def range(self) -> Tuple[int, int]:
         return self._range
 
     def __call__(self, lamb: npt.NDArray) -> float:
-        lfilter(self._data, lamb, out=self._data_buf)
-        lfilter(self._var, lamb, dim=(0, 1), out=self._var_buf)
-        data_f = self._data_buf[self._slice]
-        var_f = self._var_buf[self._slice, self._slice]
-        corr, err = var_to_corr(var_f)
-        data_f /= err
-        t2 = (data_f @ np.linalg.solve(corr, data_f)).item()
+        lfilter(self._mean, lamb, out=self._mean_buf)
+        lfilter(self._cov, lamb, dim=(0, 1), out=self._cov_buf)
+        mean_f = self._mean_buf[self._slice]
+        cov_f = self._cov_buf[self._slice, self._slice]
+        corr, err = var_to_corr(cov_f)
+        mean_f /= err
+        t2 = (mean_f @ np.linalg.solve(corr, mean_f)).item()
         return t2
+
+
+@dataclass
+class LaplaceFilterSpectrumResult:
+    energies: List[npt.NDArray] = field(default_factory=list)
+    lambdas: List[npt.NDArray] = field(default_factory=list)
+    sig_states: int = -1
+    t2: npt.NDArray = field(default_factory=lambda: np.empty(0))
+    dt2: npt.NDArray = field(default_factory=lambda: np.empty(0))
+    p_val: npt.NDArray = field(default_factory=lambda: np.empty(0))
+    pbar_val: npt.NDArray = field(default_factory=lambda: np.empty(0))
+
+
+def lfilter_spectrum(
+    mean: npt.NDArray,
+    cov: npt.NDArray,
+    n_state: int,
+    ti: int,
+    tf: int,
+    alpha: float = 0.05,
+    verbose: bool = False,
+    init_lambda: float = 50.0,
+) -> LaplaceFilterSpectrumResult:
+    msg = ""
+    res = LaplaceFilterSpectrumResult()
+    t_guess = mean.shape[0] // 4
+    m_guess = math.acosh(
+        (mean[t_guess - 1] + mean[t_guess + 1]) / (2.0 * mean[t_guess])
+    )
+    if verbose:
+        print(
+            f"==== Laplace filter spectrum -- ti = {ti}, tf = {tf} ({tf - ti} points)"
+        )
+    if verbose:
+        print(f"ground state guess: {m_guess:.4f}")
+    init = [m_guess]
+    p = []
+    pb = []
+    t2 = []
+    dt2 = []
+    for r in range(1, n_state + 1):
+        t2_func = LaplaceFilteredT2(mean, cov, (ti, tf), r)
+
+        def cost(*lambdas):
+            return t2_func(np.asarray(lambdas, dtype=float))
+
+        names = [f"lambda_{i}" for i in range(r)]
+        m = Minuit(cost, *init, name=names)
+        m.limits = (0, None)
+        m.simplex()  # simplex preconditioning
+        minimum = m.migrad()
+        assert minimum.fmin is not None
+        if not minimum.fmin.is_valid:
+            print("warning: invalid minimum")
+        init = sorted(list(minimum.values))
+        lambs = np.array(init)
+        res.lambdas.append(lambs)
+        res.energies.append(lfilter_tilde_inv(lambs))
+        t2.append(t2_func(lambs))
+        init.append(init_lambda)
+        p.append(1 - stats.chi2.cdf(t2[-1], tf - ti - r))
+        if verbose:
+            msg = f"{r} states: T^2_{r} = {t2[-1]:.2e} (p_{r} = {p[-1]:.2e})"
+        if r > 1:
+            dt2.append(math.fabs(t2[-2] - t2[-1]))
+            pb.append(1 - stats.chi2.cdf(dt2[-1], 1))
+            if verbose:
+                msg += f", ΔT^2_{r - 1} = {dt2[-1]:.2e} (pb_{r - 1} = {pb[-1]:.2e})"
+        if verbose:
+            msg += f", Lambda = {lambs}"
+            print(msg)
+    order = sorted(range(len(pb)), key=pb.__getitem__)
+    max_reject = 0
+    reject = ""
+    for j in range(0, n_state - 1):
+        if pb[order[j]] < alpha / (n_state - 1 - j):
+            max_reject = max(max_reject, order[j] + 1)
+            reject += f" H{order[j] + 1}"
+    if verbose:
+        msg = f"Holm-Bonferroni rejections:{reject}"
+    if p[max_reject] < alpha:
+        if verbose:
+            msg += f" -- H{max_reject + 1} rejected, inconclusive"
+        res.sig_states = -1
+    else:
+        if verbose:
+            msg += f" -- H{max_reject + 1} not rejected, {max_reject + 1} sigificant states"
+        res.sig_states = max_reject + 1
+    if verbose:
+        print(msg)
+    res.p_val = np.array(p)
+    res.pbar_val = np.array(pb)
+    res.t2 = np.array(t2)
+    res.dt2 = np.array(dt2)
+    return res
