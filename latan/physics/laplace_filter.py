@@ -6,10 +6,10 @@ import numpy as np
 import numpy.typing as npt
 from iminuit import Minuit
 from numba import njit
-from scipy import stats
+from scipy import linalg, stats
 
-from latan.statistics.correlation import var_to_corr
 from latan.statistics.correlated_data import CorrelatedData
+from latan.statistics.correlation import var_to_corr
 
 
 @njit(cache=True)
@@ -100,9 +100,7 @@ class LaplaceFilteredT2:
     _ranges: List[Tuple[int, int]]
     _filtered_data: CorrelatedData
 
-    def __init__(
-        self, data: CorrelatedData, ranges: List[Tuple[int, int]]
-    ) -> None:
+    def __init__(self, data: CorrelatedData, ranges: List[Tuple[int, int]]) -> None:
         if len(ranges) != data.n_quantities:
             raise ValueError(
                 f"number of ranges and quantities mismatch "
@@ -110,9 +108,7 @@ class LaplaceFilteredT2:
             )
         self._data = data
         self._ranges = list(ranges)
-        mean_buf = [
-            np.empty_like(data.mean(i)) for i in range(data.n_quantities)
-        ]
+        mean_buf = [np.empty_like(data.mean(i)) for i in range(data.n_quantities)]
         cov_buf = [
             [np.zeros_like(data.covariance(i, j)) for j in range(i, data.n_quantities)]
             for i in range(data.n_quantities)
@@ -126,7 +122,9 @@ class LaplaceFilteredT2:
     def _t2_kernel(self, mean, cov) -> float:
         corr, err = var_to_corr(cov)
         mean_norm = mean / err
-        return (mean_norm @ np.linalg.solve(corr, mean_norm)).item()
+        factor, lower = linalg.cho_factor(corr, check_finite=False)
+        solved = linalg.cho_solve((factor, lower), mean_norm, check_finite=False)
+        return (mean_norm @ solved).item()
 
     def __call__(self, lamb: npt.NDArray) -> float:
         for i in range(self._data.n_quantities):
@@ -182,9 +180,9 @@ def lfilter_spectrum(
     dt2 = []
     data = CorrelatedData([mean], [[cov]])
     uncorr_data = CorrelatedData([mean], [[np.diag(np.diag(cov))]])
+    t2_func = LaplaceFilteredT2(data, [(ti, tf)])
+    t2_uncorr_func = LaplaceFilteredT2(uncorr_data, [(ti, tf)])
     for r in range(1, n_state + 1):
-        t2_func = LaplaceFilteredT2(data, [(ti, tf)])
-        t2_uncorr_func = LaplaceFilteredT2(uncorr_data, [(ti, tf)])
 
         def cost_uncorr(*lambdas):
             return t2_uncorr_func(np.asarray(lambdas, dtype=float))
@@ -199,7 +197,6 @@ def lfilter_spectrum(
         m_uncorr.migrad()
         m = Minuit(cost, *m_uncorr.values, name=names)
         m.limits = (0, None)
-        m.migrad()
         minimum = m.migrad()
         assert minimum.fmin is not None
         if not minimum.fmin.is_valid:
