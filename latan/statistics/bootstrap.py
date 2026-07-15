@@ -7,6 +7,28 @@ import numpy.typing as npt
 from latan.statistics.gaussian_rng import gaussian_sample
 
 
+class BootstrapArray(np.ndarray):
+    def __new__(cls, array: npt.ArrayLike):
+        array = np.asarray(array)
+        if array.ndim < 2 or array.shape[0] < 2:
+            raise ValueError("expected shape (n_bootstrap + 1, ...)")
+        return array.view(cls)
+
+    def __array_finalize__(self, obj) -> None:
+        pass
+
+    @property
+    def central(self) -> npt.NDArray:
+        return np.asarray(self[0])
+
+    @property
+    def samples(self) -> npt.NDArray:
+        return np.asarray(self[1:])
+
+    def cov(self) -> npt.NDArray:
+        return np.cov(self.samples, rowvar=False)
+
+
 class Bootstrap(ABC):
     _bitgen: np.random.BitGenerator
     _gen: np.random.Generator
@@ -25,7 +47,7 @@ class Bootstrap(ABC):
         self._bitgen.state = value
 
     @abstractmethod
-    def sample(self, data: npt.NDArray, size: int) -> npt.NDArray:
+    def sample(self, data: npt.NDArray, size: int) -> BootstrapArray:
         pass
 
 
@@ -33,21 +55,21 @@ class ParametricGaussianBootstrap(Bootstrap):
     def __init__(self, seed: Optional[int] = None) -> None:
         super().__init__(seed)
 
-    def sample(self, data: npt.NDArray, size: int) -> npt.NDArray:
+    def sample(self, data: npt.NDArray, size: int) -> BootstrapArray:
         s = np.zeros([size + 1, *data.shape[1:]])
         n = data.shape[0]
         mean = data.mean(axis=0)
         var = np.cov(data, rowvar=False) / n
         s[0] = mean
         s[1:] = gaussian_sample(self._gen, size, mean, var)
-        return s
+        return BootstrapArray(s)
 
 
 class NonparametricBootstrap(Bootstrap):
     def __init__(self, seed: Optional[int] = None) -> None:
         super().__init__(seed)
 
-    def sample(self, data: npt.NDArray, size: int) -> npt.NDArray:
+    def sample(self, data: npt.NDArray, size: int) -> BootstrapArray:
         s = np.zeros([size + 1, *data.shape[1:]])
         n = data.shape[0]
         mean = data.mean(axis=0)
@@ -55,4 +77,4 @@ class NonparametricBootstrap(Bootstrap):
         data_boot = data[ind, ...]
         s[0] = mean
         s[1:] = data_boot.mean(axis=0)
-        return s
+        return BootstrapArray(s)
