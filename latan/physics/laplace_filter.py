@@ -9,6 +9,7 @@ from numba import njit
 from scipy import stats
 
 from latan.statistics.correlation import var_to_corr
+from latan.statistics.correlated_data import CorrelatedData
 
 
 @njit(cache=True)
@@ -95,28 +96,32 @@ def lfilter_tilde_inv(lamb):
 
 
 class LaplaceFilteredT2:
-    _range: Tuple[int, int]
-    _slice: slice
-    _mean: npt.NDArray
-    _cov: npt.NDArray
-    _mean_buf: npt.NDArray
-    _cov_buf: npt.NDArray
-    _n_state: int
+    _data: CorrelatedData
+    _ranges: List[Tuple[int, int]]
+    _filtered_data: CorrelatedData
 
     def __init__(
-        self, mean: npt.NDArray, cov: npt.NDArray, range: Tuple[int, int], n_state: int
+        self, data: CorrelatedData, ranges: List[Tuple[int, int]]
     ) -> None:
-        self._range = range
-        self._slice = slice(*range)
-        self._mean = mean
-        self._cov = cov
-        self._n_state = n_state
-        self._mean_buf = np.empty_like(self._mean)
-        self._cov_buf = np.empty_like(self._cov)
+        if len(ranges) != data.n_quantities:
+            raise ValueError(
+                f"number of ranges and quantities mismatch "
+                f"(got {len(ranges)}, expected {data.n_quantities})"
+            )
+        self._data = data
+        self._ranges = list(ranges)
+        mean_buf = [
+            np.empty_like(data.mean(i)) for i in range(data.n_quantities)
+        ]
+        cov_buf = [
+            [np.zeros_like(data.covariance(i, j)) for j in range(i, data.n_quantities)]
+            for i in range(data.n_quantities)
+        ]
+        self._filtered_data = CorrelatedData(mean_buf, cov_buf)
 
     @property
-    def range(self) -> Tuple[int, int]:
-        return self._range
+    def ranges(self) -> Tuple[Tuple[int, int], ...]:
+        return tuple(self._ranges)
 
     def _t2_kernel(self, mean, cov) -> float:
         corr, err = var_to_corr(cov)
@@ -124,10 +129,16 @@ class LaplaceFilteredT2:
         return (mean_norm @ np.linalg.solve(corr, mean_norm)).item()
 
     def __call__(self, lamb: npt.NDArray) -> float:
-        lfilter(self._mean, lamb, out=self._mean_buf)
-        lfilter(self._cov, lamb, dim=(0, 1), out=self._cov_buf)
-        mean_f = self._mean_buf[self._slice]
-        cov_f = self._cov_buf[self._slice, self._slice]
+        for i in range(self._data.n_quantities):
+            lfilter(self._data.mean(i), lamb, out=self._filtered_data.mean(i))
+            for j in range(i, self._data.n_quantities):
+                lfilter(
+                    self._data.covariance(i, j),
+                    lamb,
+                    dim=(0, 1),
+                    out=self._filtered_data.covariance(i, j),
+                )
+        mean_f, cov_f = self._filtered_data.total_mean_cov(self._ranges)
         return self._t2_kernel(mean_f, cov_f)
 
 
@@ -169,9 +180,11 @@ def lfilter_spectrum(
     pb = []
     t2 = []
     dt2 = []
+    data = CorrelatedData([mean], [[cov]])
+    uncorr_data = CorrelatedData([mean], [[np.diag(np.diag(cov))]])
     for r in range(1, n_state + 1):
-        t2_func = LaplaceFilteredT2(mean, cov, (ti, tf), r)
-        t2_uncorr_func = LaplaceFilteredT2(mean, np.diag(np.diag(cov)), (ti, tf), r)
+        t2_func = LaplaceFilteredT2(data, [(ti, tf)])
+        t2_uncorr_func = LaplaceFilteredT2(uncorr_data, [(ti, tf)])
 
         def cost_uncorr(*lambdas):
             return t2_uncorr_func(np.asarray(lambdas, dtype=float))
