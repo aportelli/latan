@@ -118,15 +118,17 @@ class LaplaceFilteredT2:
     def range(self) -> Tuple[int, int]:
         return self._range
 
+    def _t2_kernel(self, mean, cov) -> float:
+        corr, err = var_to_corr(cov)
+        mean_norm = mean / err
+        return (mean_norm @ np.linalg.solve(corr, mean_norm)).item()
+
     def __call__(self, lamb: npt.NDArray) -> float:
         lfilter(self._mean, lamb, out=self._mean_buf)
         lfilter(self._cov, lamb, dim=(0, 1), out=self._cov_buf)
         mean_f = self._mean_buf[self._slice]
         cov_f = self._cov_buf[self._slice, self._slice]
-        corr, err = var_to_corr(cov_f)
-        mean_f /= err
-        t2 = (mean_f @ np.linalg.solve(corr, mean_f)).item()
-        return t2
+        return self._t2_kernel(mean_f, cov_f)
 
 
 @dataclass
@@ -169,14 +171,22 @@ def lfilter_spectrum(
     dt2 = []
     for r in range(1, n_state + 1):
         t2_func = LaplaceFilteredT2(mean, cov, (ti, tf), r)
+        t2_uncorr_func = LaplaceFilteredT2(mean, np.diag(np.diag(cov)), (ti, tf), r)
+
+        def cost_uncorr(*lambdas):
+            return t2_uncorr_func(np.asarray(lambdas, dtype=float))
 
         def cost(*lambdas):
             return t2_func(np.asarray(lambdas, dtype=float))
 
         names = [f"lambda_{i}" for i in range(r)]
-        m = Minuit(cost, *init, name=names)
+        m_uncorr = Minuit(cost_uncorr, *init, name=names)
+        m_uncorr.limits = (0, None)
+        m_uncorr.simplex()
+        m_uncorr.migrad()
+        m = Minuit(cost, *m_uncorr.values, name=names)
         m.limits = (0, None)
-        m.simplex()  # simplex preconditioning
+        m.migrad()
         minimum = m.migrad()
         assert minimum.fmin is not None
         if not minimum.fmin.is_valid:
