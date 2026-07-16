@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from typing import Any, Mapping, Optional
 
 import numpy as np
@@ -28,15 +29,23 @@ class BootstrapArray(np.ndarray):
     def cov(self) -> npt.NDArray:
         return np.cov(self.samples, rowvar=False)
 
+    def std(self) -> npt.NDArray:
+        return np.std(self.samples, axis=0)
+
 
 class Bootstrap(ABC):
     _bitgen: np.random.BitGenerator
     _gen: np.random.Generator
+    _initial_state: Mapping[str, Any]
 
     def __init__(self, seed: Optional[int] = None) -> None:
         super().__init__()
         self._bitgen = np.random.PCG64(seed)
         self._gen = np.random.Generator(self._bitgen)
+        self._initial_state = deepcopy(self.state)
+
+    def _reset_state(self) -> None:
+        self._bitgen.state = deepcopy(self._initial_state)
 
     @property
     def state(self) -> Mapping[str, Any]:
@@ -56,6 +65,7 @@ class ParametricGaussianBootstrap(Bootstrap):
         super().__init__(seed)
 
     def sample(self, data: npt.NDArray, size: int) -> BootstrapArray:
+        self._reset_state()
         s = np.zeros([size + 1, *data.shape[1:]])
         n = data.shape[0]
         mean = data.mean(axis=0)
@@ -70,6 +80,7 @@ class NonparametricBootstrap(Bootstrap):
         super().__init__(seed)
 
     def sample(self, data: npt.NDArray, size: int) -> BootstrapArray:
+        self._reset_state()
         s = np.zeros([size + 1, *data.shape[1:]])
         n = data.shape[0]
         mean = data.mean(axis=0)
