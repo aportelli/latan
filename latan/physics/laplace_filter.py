@@ -1,6 +1,6 @@
 import math
 from dataclasses import dataclass, field
-from typing import List, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -159,7 +159,8 @@ def lfilter_spectrum(
     tf: int,
     alpha: float = 0.05,
     verbose: bool = False,
-    init_lambda: float = 50.0,
+    init_lambda: float = 100.0,
+    ncall: int = 5000,
 ) -> LaplaceFilterSpectrumResult:
     msg = ""
     res = LaplaceFilterSpectrumResult()
@@ -173,40 +174,45 @@ def lfilter_spectrum(
         )
     if verbose:
         print(f"ground state guess: {m_guess:.4f}")
-    init = [m_guess]
     p = []
     pb = []
     t2 = []
     dt2 = []
+    previous_lambs: Optional[npt.NDArray] = None
     data = CorrelatedData([mean], [[cov]])
     uncorr_data = CorrelatedData([mean], [[np.diag(np.diag(cov))]])
     t2_func = LaplaceFilteredT2(data, [(ti, tf)])
     t2_uncorr_func = LaplaceFilteredT2(uncorr_data, [(ti, tf)])
     for r in range(1, n_state + 1):
 
-        def cost_uncorr(*lambdas):
-            return t2_uncorr_func(np.asarray(lambdas, dtype=float))
-
         def cost(*lambdas):
             return t2_func(np.asarray(lambdas, dtype=float))
 
         names = [f"lambda_{i}" for i in range(r)]
-        m_uncorr = Minuit(cost_uncorr, *init, name=names)
-        m_uncorr.limits = (0, None)
-        m_uncorr.simplex()
-        m_uncorr.migrad()
-        m = Minuit(cost, *m_uncorr.values, name=names)
+        if previous_lambs is None:
+
+            def cost_uncorr(*lambdas):
+                return t2_uncorr_func(np.asarray(lambdas, dtype=float))
+
+            m_uncorr = Minuit(cost_uncorr, m_guess, name=names)
+            m_uncorr.limits = (0, None)
+            m_uncorr.simplex()
+            m_uncorr.migrad()
+            start = np.asarray(m_uncorr.values)
+        else:
+            start = np.append(previous_lambs, init_lambda)
+
+        m = Minuit(cost, *start, name=names)
         m.limits = (0, None)
-        minimum = m.migrad()
+        minimum = m.migrad(ncall=ncall)
         assert minimum.fmin is not None
         if not minimum.fmin.is_valid:
             print("warning: invalid minimum")
-        init = sorted(list(minimum.values))
-        lambs = np.array(init)
+        lambs = np.asarray(sorted(minimum.values))
         res.lambdas.append(lambs)
         res.energies.append(lfilter_tilde_inv(lambs))
         t2.append(t2_func(lambs))
-        init.append(init_lambda)
+        previous_lambs = lambs
         p.append(1 - stats.chi2.cdf(t2[-1], tf - ti - r))
         if verbose:
             msg = f"{r} states: T^2_{r} = {t2[-1]:.2e} (p_{r} = {p[-1]:.2e})"
