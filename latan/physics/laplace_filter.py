@@ -110,7 +110,7 @@ class LaplaceFilteredT2:
         self._ranges = list(ranges)
         mean_buf = [np.empty_like(data.mean(i)) for i in range(data.n_quantities)]
         cov_buf = [
-            [np.zeros_like(data.covariance(i, j)) for j in range(i, data.n_quantities)]
+            [np.zeros_like(data.cov(i, j)) for j in range(i, data.n_quantities)]
             for i in range(data.n_quantities)
         ]
         self._filtered_data = CorrelatedData(mean_buf, cov_buf)
@@ -131,99 +131,150 @@ class LaplaceFilteredT2:
             lfilter(self._data.mean(i), lamb, out=self._filtered_data.mean(i))
             for j in range(i, self._data.n_quantities):
                 lfilter(
-                    self._data.covariance(i, j),
+                    self._data.cov(i, j),
                     lamb,
                     dim=(0, 1),
-                    out=self._filtered_data.covariance(i, j),
+                    out=self._filtered_data.cov(i, j),
                 )
         mean_f, cov_f = self._filtered_data.total_mean_cov(self._ranges)
         return self._t2_kernel(mean_f, cov_f)
 
 
 @dataclass
-class LaplaceFilterSpectrumResult:
-    energies: List[npt.NDArray] = field(default_factory=list)
-    lambdas: List[npt.NDArray] = field(default_factory=list)
-    sig_states: int = -1
-    t2: npt.NDArray = field(default_factory=lambda: np.empty(0))
+class LaplaceFilterSpectrum:
+    energies: npt.NDArray
+    lambdas: npt.NDArray
+    t2: float
+    p_value: float
+    dof: int
+
+
+@dataclass
+class LaplaceFilterSpectrumTest:
+    spectra: List[LaplaceFilterSpectrum] = field(default_factory=list)
     dt2: npt.NDArray = field(default_factory=lambda: np.empty(0))
-    p_val: npt.NDArray = field(default_factory=lambda: np.empty(0))
     pbar_val: npt.NDArray = field(default_factory=lambda: np.empty(0))
+    sig_states: int = -1
 
 
 def lfilter_spectrum(
-    mean: npt.NDArray,
-    cov: npt.NDArray,
+    data: CorrelatedData,
+    ranges: List[Tuple[int, int]],
     n_state: int,
-    ti: int,
-    tf: int,
+    *,
+    m_guess: Optional[float] = None,
+    initial_lambdas: Optional[npt.NDArray] = None,
+    init_lambda: float = 100.0,
+    ncall: int = 5000,
+) -> LaplaceFilterSpectrum:
+    if n_state < 1:
+        raise ValueError("n_state must be positive")
+    if len(ranges) != data.n_quantities:
+        raise ValueError(
+            f"number of ranges and quantities mismatch "
+            f"(got {len(ranges)}, expected {data.n_quantities})"
+        )
+    dof = sum(stop - start for start, stop in ranges) - n_state
+    if dof <= 0:
+        raise ValueError(f"non-positive degrees of freedom ({dof})")
+
+    if m_guess is None:
+        mean = data.mean()
+        t_guess = mean.shape[0] // 4
+        m_guess = math.log(mean[t_guess - 1] / mean[t_guess])
+
+    t2_func = LaplaceFilteredT2(data, ranges)
+
+    def cost(*lambdas):
+        return t2_func(np.asarray(lambdas, dtype=float))
+
+    names = [f"lambda_{i}" for i in range(n_state)]
+    if initial_lambdas is None:
+        t2_uncorr_func = LaplaceFilteredT2(data.uncorrelated(), ranges)
+
+        def cost_uncorr(*lambdas):
+            return t2_uncorr_func(np.asarray(lambdas, dtype=float))
+
+        start = np.array([m_guess, *([init_lambda] * (n_state - 1))])
+        m_uncorr = Minuit(cost_uncorr, *start, name=names)
+        m_uncorr.limits = (0, None)
+        m_uncorr.simplex()
+        m_uncorr.migrad()
+        start = np.asarray(m_uncorr.values)
+    else:
+        start = np.asarray(initial_lambdas, dtype=float)
+        if start.shape != (n_state,):
+            raise ValueError(
+                f"initial_lambdas has shape {start.shape}, expected ({n_state},)"
+            )
+
+    minimum = Minuit(cost, *start, name=names)
+    minimum.limits = (0, None)
+    result = minimum.migrad(ncall=ncall)
+    assert result.fmin is not None
+    if not result.fmin.is_valid:
+        print("warning: invalid minimum")
+    lambdas = np.asarray(sorted(minimum.values))
+    t2 = t2_func(lambdas)
+    spectrum = LaplaceFilterSpectrum(
+        energies=lfilter_tilde_inv(lambdas),
+        lambdas=lambdas,
+        t2=t2,
+        p_value=stats.chi2.sf(t2, dof).item(),
+        dof=dof,
+    )
+    return spectrum
+
+
+def lfilter_spectrum_test(
+    data: CorrelatedData,
+    ranges: List[Tuple[int, int]],
+    n_state: int,
     alpha: float = 0.05,
     verbose: bool = False,
     init_lambda: float = 100.0,
     ncall: int = 5000,
-) -> LaplaceFilterSpectrumResult:
+) -> LaplaceFilterSpectrumTest:
     msg = ""
-    res = LaplaceFilterSpectrumResult()
-    t_guess = mean.shape[0] // 4
-    m_guess = math.acosh(
-        (mean[t_guess - 1] + mean[t_guess + 1]) / (2.0 * mean[t_guess])
-    )
+    res = LaplaceFilterSpectrumTest()
     if verbose:
+        ranges_str = ", ".join(f"[{start}, {stop})" for start, stop in ranges)
         print(
-            f"==== Laplace filter spectrum -- ti = {ti}, tf = {tf} ({tf - ti} points)"
+            f"==== Laplace filter spectrum -- ranges = {ranges_str}"
         )
-    if verbose:
-        print(f"ground state guess: {m_guess:.4f}")
     p = []
     pb = []
     t2 = []
     dt2 = []
     previous_lambs: Optional[npt.NDArray] = None
-    data = CorrelatedData([mean], [[cov]])
-    uncorr_data = CorrelatedData([mean], [[np.diag(np.diag(cov))]])
-    t2_func = LaplaceFilteredT2(data, [(ti, tf)])
-    t2_uncorr_func = LaplaceFilteredT2(uncorr_data, [(ti, tf)])
     for r in range(1, n_state + 1):
-
-        def cost(*lambdas):
-            return t2_func(np.asarray(lambdas, dtype=float))
-
-        names = [f"lambda_{i}" for i in range(r)]
-        if previous_lambs is None:
-
-            def cost_uncorr(*lambdas):
-                return t2_uncorr_func(np.asarray(lambdas, dtype=float))
-
-            m_uncorr = Minuit(cost_uncorr, m_guess, name=names)
-            m_uncorr.limits = (0, None)
-            m_uncorr.simplex()
-            m_uncorr.migrad()
-            start = np.asarray(m_uncorr.values)
-        else:
-            start = np.append(previous_lambs, init_lambda)
-
-        m = Minuit(cost, *start, name=names)
-        m.limits = (0, None)
-        minimum = m.migrad(ncall=ncall)
-        assert minimum.fmin is not None
-        if not minimum.fmin.is_valid:
-            print("warning: invalid minimum")
-        lambs = np.asarray(sorted(minimum.values))
-        res.lambdas.append(lambs)
-        res.energies.append(lfilter_tilde_inv(lambs))
-        t2.append(t2_func(lambs))
-        previous_lambs = lambs
-        p.append(1 - stats.chi2.cdf(t2[-1], tf - ti - r))
+        initial_lambdas = (
+            None if previous_lambs is None else np.append(previous_lambs, init_lambda)
+        )
+        spectrum = lfilter_spectrum(
+            data,
+            ranges,
+            r,
+            initial_lambdas=initial_lambdas,
+            init_lambda=init_lambda,
+            ncall=ncall,
+        )
+        res.spectra.append(spectrum)
+        t2.append(spectrum.t2)
+        p.append(spectrum.p_value)
+        previous_lambs = spectrum.lambdas
         if verbose:
-            msg = f"{r} states: T^2_{r} = {t2[-1]:.2e} (p_{r} = {p[-1]:.2e})"
+            msg = (
+                f"{r} states: T^2_{r} = {spectrum.t2:.2e} "
+                f"(p_{r} = {spectrum.p_value:.2e})"
+            )
         if r > 1:
             dt2.append(math.fabs(t2[-2] - t2[-1]))
             pb.append(1 - stats.chi2.cdf(dt2[-1], 1))
             if verbose:
                 msg += f", ΔT^2_{r - 1} = {dt2[-1]:.2e} (pb_{r - 1} = {pb[-1]:.2e})"
         if verbose:
-            msg += f", Lambda = {lambs}"
-            print(msg)
+            print(f"{msg}, Lambda = {spectrum.lambdas}")
     order = sorted(range(len(pb)), key=pb.__getitem__)
     max_reject = 0
     reject = ""
@@ -243,8 +294,6 @@ def lfilter_spectrum(
         res.sig_states = max_reject + 1
     if verbose:
         print(msg)
-    res.p_val = np.array(p)
     res.pbar_val = np.array(pb)
-    res.t2 = np.array(t2)
     res.dt2 = np.array(dt2)
     return res

@@ -93,7 +93,7 @@ class TestLaplaceFilter(unittest.TestCase):
         selected_mean, selected_cov = data.total_mean_cov(ranges)
         self.assertEqual(selected_mean.shape, (5,))
         self.assertEqual(selected_cov.shape, (5, 5))
-        np.testing.assert_allclose(data.covariance(1, 0), cov_ab.T)
+        np.testing.assert_allclose(data.cov(1, 0), cov_ab.T)
         np.testing.assert_allclose(selected_cov[:3, 3:], cov_ab[1:4, :2])
         self.assertAlmostEqual(
             t2(lamb), self._reference_t2(mean_expected, cov_expected)

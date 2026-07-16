@@ -69,14 +69,26 @@ class CorrelatedData:
         if not 0 <= index < self.n_quantities:
             raise IndexError(f"quantity index {index} out of range")
 
-    def mean(self, index: int) -> npt.NDArray:
+    def mean(self, index: int = 0) -> npt.NDArray:
         self._validate_index(index)
         return self._mean[index]
 
-    def covariance(self, i: int, j: int) -> npt.NDArray:
+    def cov(self, i: int = 0, j: int = 0) -> npt.NDArray:
         self._validate_index(i)
         self._validate_index(j)
         return self._cov_block(i, j)
+
+    def uncorrelated(self) -> "CorrelatedData":
+        cov = [
+            [
+                np.diag(np.diag(self.cov(i, j)))
+                if i == j
+                else np.zeros_like(self.cov(i, j))
+                for j in range(i, self.n_quantities)
+            ]
+            for i in range(self.n_quantities)
+        ]
+        return CorrelatedData(self._mean, cov)
 
     def size(self, index: int) -> int:
         self._validate_index(index)
