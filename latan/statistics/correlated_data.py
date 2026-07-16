@@ -7,63 +7,63 @@ from latan.statistics.bootstrap import BootstrapArray
 
 
 class CorrelatedData:
-    _mean: List[npt.NDArray]
-    _cov: List[List[npt.NDArray]]
+    _means: List[npt.NDArray]
+    _covs: List[List[npt.NDArray]]
 
     def __init__(
         self,
-        mean: List[npt.NDArray],
-        cov: List[List[npt.NDArray]],
+        means: List[npt.NDArray],
+        covs: List[List[npt.NDArray]],
     ) -> None:
-        n = len(mean)
+        n = len(means)
         if n == 0:
             raise ValueError("mean list is empty")
-        for m in mean:
+        for m in means:
             if m.ndim != 1:
                 raise ValueError(
                     f"all means are expected to have 1 dimension (got {m.ndim})"
                 )
-        if len(cov) != n:
+        if len(covs) != n:
             raise ValueError(
                 f"number of covariance rows and quantities mismatch "
-                f"(got {len(cov)}, expected {n})"
+                f"(got {len(covs)}, expected {n})"
             )
         for i in range(n):
             expected_blocks = n - i
-            if len(cov[i]) != expected_blocks:
+            if len(covs[i]) != expected_blocks:
                 raise ValueError(
-                    f"covariance row {i} has {len(cov[i])} blocks "
+                    f"covariance row {i} has {len(covs[i])} blocks "
                     f"(expected {expected_blocks})"
                 )
             for j in range(i, n):
-                block = cov[i][j - i]
+                block = covs[i][j - i]
                 if block.ndim != 2:
                     raise ValueError(
                         f"a covariance matrix is not dimension 2 "
                         f"((i,j) = ({i},{j}), ndim = {block.ndim})"
                     )
                 cov_nx, cov_ny = block.shape
-                nx = mean[i].shape[0]
-                ny = mean[j].shape[0]
+                nx = means[i].shape[0]
+                ny = means[j].shape[0]
                 if cov_nx != nx or cov_ny != ny:
                     raise ValueError(
                         f"(i,j) = ({i},{j}) covariance matrix does not have shape ({nx}, {ny}) (got ({cov_nx}, {cov_ny}))"
                     )
-            if not np.allclose(cov[i][0], cov[i][0].T):
+            if not np.allclose(covs[i][0], covs[i][0].T):
                 raise ValueError(
                     f"diagonal covariance block ({i},{i}) is not symmetric"
                 )
-        self._mean = mean
-        self._cov = cov
+        self._means = means
+        self._covs = covs
 
     def _cov_block(self, i: int, j: int) -> npt.NDArray:
         if i <= j:
-            return self._cov[i][j - i]
-        return self._cov[j][i - j].T
+            return self._covs[i][j - i]
+        return self._covs[j][i - j].T
 
     @property
     def n_quantities(self) -> int:
-        return len(self._mean)
+        return len(self._means)
 
     def _validate_index(self, index: int) -> None:
         if not 0 <= index < self.n_quantities:
@@ -71,7 +71,20 @@ class CorrelatedData:
 
     def mean(self, index: int = 0) -> npt.NDArray:
         self._validate_index(index)
-        return self._mean[index]
+        return self._means[index]
+
+    def set_means(self, means: List[npt.NDArray]) -> None:
+        if len(means) != self.n_quantities:
+            raise ValueError(
+                f"number of means and quantities mismatch "
+                f"(got {len(means)}, expected {self.n_quantities})"
+            )
+        for i, value in enumerate(means):
+            if value.ndim != 1 or value.shape != self._means[i].shape:
+                raise ValueError(
+                    f"mean {i} has shape {value.shape}, expected {self._means[i].shape}"
+                )
+        self._means = means
 
     def cov(self, i: int = 0, j: int = 0) -> npt.NDArray:
         self._validate_index(i)
@@ -88,11 +101,11 @@ class CorrelatedData:
             ]
             for i in range(self.n_quantities)
         ]
-        return CorrelatedData(self._mean, cov)
+        return CorrelatedData(self._means, cov)
 
     def size(self, index: int) -> int:
         self._validate_index(index)
-        return len(self._mean[index])
+        return len(self._means[index])
 
     def total_mean_cov(
         self, ranges: Optional[List[Tuple[int, int]]] = None
@@ -108,7 +121,7 @@ class CorrelatedData:
                 slices.append(slice(r[0], r[1]))
         else:
             slices += [slice(None)] * n
-        mean = np.concatenate([self._mean[i][slices[i]] for i in range(n)])
+        mean = np.concatenate([self._means[i][slices[i]] for i in range(n)])
         cov = np.block([
             [self._cov_block(i, j)[slices[i], slices[j]] for j in range(n)]
             for i in range(n)
