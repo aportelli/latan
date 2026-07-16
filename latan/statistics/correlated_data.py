@@ -104,35 +104,46 @@ class CorrelatedData:
         return mean, cov
 
 
-def make_correlated_data(data: List[BootstrapArray]) -> CorrelatedData:
+def make_correlated_data(
+    data: List[BootstrapArray] | List[npt.NDArray],
+) -> CorrelatedData:
     if not data:
-        raise ValueError("bootstrap data list is empty")
+        raise ValueError("data list is empty")
 
-    n_samples = data[0].samples.shape[0]
+    if all(isinstance(datum, BootstrapArray) for datum in data):
+        samples = [bootstrap.samples for bootstrap in data]
+        means = [bootstrap.central for bootstrap in data]
+        kind = "bootstrap"
+        covariance_scale = 1.0
+    elif all(type(datum) is np.ndarray for datum in data):
+        samples = data
+        means = [sample.mean(axis=0) for sample in samples]
+        kind = "primary"
+        covariance_scale = 1.0 / samples[0].shape[0]
+    else:
+        raise TypeError(
+            "data must contain only BootstrapArray or only plain numpy.ndarray"
+        )
+
+    n_samples = samples[0].shape[0]
     if n_samples < 2:
-        raise ValueError("at least two bootstrap samples are required")
-    means = []
-    samples = []
-    for i, bootstrap in enumerate(data):
-        m = bootstrap.central
-        s = bootstrap.samples
+        raise ValueError(f"at least two {kind} samples are required")
+    for i, (m, s) in enumerate(zip(means, samples)):
         if m.ndim != 1:
             raise ValueError(
-                f"bootstrap datum {i} has a non-vector central value (ndim = {m.ndim})"
+                f"{kind} datum {i} has a non-vector mean (ndim = {m.ndim})"
             )
         if s.ndim != 2:
             raise ValueError(
-                f"bootstrap datum {i} has non-matrix samples (ndim = {s.ndim})"
+                f"{kind} datum {i} has non-matrix samples (ndim = {s.ndim})"
             )
         if s.shape != (n_samples, m.size):
             raise ValueError(
-                f"bootstrap datum {i} has sample shape {s.shape}, "
+                f"{kind} datum {i} has sample shape {s.shape}, "
                 f"expected ({n_samples}, {m.size})"
             )
-        means.append(m)
-        samples.append(s)
     joint_samples = np.concatenate(samples, axis=1)
-    joint_cov = np.atleast_2d(np.cov(joint_samples, rowvar=False))
+    joint_cov = np.atleast_2d(np.cov(joint_samples, rowvar=False)) * covariance_scale
     bounds = np.cumsum([0, *(mean.size for mean in means)])
     cov = [
         [
