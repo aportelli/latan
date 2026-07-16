@@ -8,7 +8,8 @@ from iminuit import Minuit
 from numba import njit
 from scipy import linalg, stats
 
-from latan.statistics.correlated_data import CorrelatedData
+from latan.statistics.bootstrap import BootstrapArray
+from latan.statistics.correlated_data import CorrelatedData, make_correlated_data
 from latan.statistics.correlation import var_to_corr
 
 
@@ -142,8 +143,8 @@ class LaplaceFilteredT2:
 
 @dataclass
 class LaplaceFilterSpectrum:
-    energies: npt.NDArray
-    lambdas: npt.NDArray
+    energies: npt.NDArray | BootstrapArray
+    lambdas: npt.NDArray | BootstrapArray
     t2: float
     p_value: float
     dof: int
@@ -157,7 +158,7 @@ class LaplaceFilterSpectrumTest:
     sig_states: int = -1
 
 
-def lfilter_spectrum(
+def _lfilter_spectrum(
     data: CorrelatedData,
     ranges: List[Tuple[int, int]],
     n_state: int,
@@ -226,6 +227,69 @@ def lfilter_spectrum(
     return spectrum
 
 
+def lfilter_spectrum(
+    data: CorrelatedData | List[BootstrapArray],
+    ranges: List[Tuple[int, int]],
+    n_state: int,
+    *,
+    m_guess: Optional[float] = None,
+    initial_lambdas: Optional[npt.NDArray] = None,
+    init_lambda: float = 100.0,
+    ncall: int = 5000,
+) -> LaplaceFilterSpectrum:
+    if isinstance(data, CorrelatedData):
+        return _lfilter_spectrum(
+            data,
+            ranges,
+            n_state,
+            m_guess=m_guess,
+            initial_lambdas=initial_lambdas,
+            init_lambda=init_lambda,
+            ncall=ncall,
+        )
+    if not isinstance(data, list):
+        raise TypeError("data must be CorrelatedData or a list of BootstrapArray")
+    if not data:
+        raise ValueError("bootstrap data list is empty")
+    if not all(isinstance(datum, BootstrapArray) for datum in data):
+        raise TypeError("data must be CorrelatedData or a list of BootstrapArray")
+
+    corr_data = make_correlated_data(data)
+    n_bootstrap = data[0].samples.shape[0]
+    lambdas = np.empty((n_bootstrap + 1, n_state))
+    energies = np.empty_like(lambdas)
+    central = _lfilter_spectrum(
+        corr_data,
+        ranges,
+        n_state,
+        m_guess=m_guess,
+        initial_lambdas=initial_lambdas,
+        init_lambda=init_lambda,
+        ncall=ncall,
+    )
+    lambdas[0] = central.lambdas
+    energies[0] = central.energies
+    for sample in range(n_bootstrap):
+        corr_data.set_means([bootstrap.samples[sample] for bootstrap in data])
+        replica = _lfilter_spectrum(
+            corr_data,
+            ranges,
+            n_state,
+            initial_lambdas=central.lambdas,
+            init_lambda=init_lambda,
+            ncall=ncall,
+        )
+        lambdas[sample + 1] = replica.lambdas
+        energies[sample + 1] = replica.energies
+    return LaplaceFilterSpectrum(
+        energies=BootstrapArray(energies),
+        lambdas=BootstrapArray(lambdas),
+        t2=central.t2,
+        p_value=central.p_value,
+        dof=central.dof,
+    )
+
+
 def lfilter_spectrum_test(
     data: CorrelatedData,
     ranges: List[Tuple[int, int]],
@@ -239,9 +303,7 @@ def lfilter_spectrum_test(
     res = LaplaceFilterSpectrumTest()
     if verbose:
         ranges_str = ", ".join(f"[{start}, {stop})" for start, stop in ranges)
-        print(
-            f"==== Laplace filter spectrum -- ranges = {ranges_str}"
-        )
+        print(f"==== Laplace filter spectrum -- ranges = {ranges_str}")
     p = []
     pb = []
     t2 = []
