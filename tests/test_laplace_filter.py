@@ -50,7 +50,7 @@ class TestLaplaceFilter(unittest.TestCase):
         matrix = rng.normal(size=(5, 5))
         cov = matrix @ matrix.T + np.eye(5)
         lamb = np.array([0.4, 0.7])
-        data = CorrelatedData([mean], [[cov]])
+        data = CorrelatedData(mean, cov)
         t2 = latan.LaplaceFilteredT2(data, [(1, 5)])
 
         mean_filtered = latan.lfilter(mean, lamb)[1:5]
@@ -98,3 +98,18 @@ class TestLaplaceFilter(unittest.TestCase):
         self.assertAlmostEqual(
             t2(lamb), self._reference_t2(mean_expected, cov_expected)
         )
+
+    def test_lfilter_spectrum_parallel(self) -> None:
+        rng = np.random.default_rng(4)
+        time = np.arange(8)
+        central = np.exp(-0.4 * time) + 0.2 * np.exp(-1.0 * time)
+        samples = central + rng.normal(scale=1e-3, size=(16, time.size))
+        bootstrap = latan.BootstrapArray(np.vstack([central, samples]))
+
+        serial = latan.lfilter_spectrum(bootstrap, (1, 7), 2, workers=1)
+        parallel = latan.lfilter_spectrum(bootstrap, (1, 7), 2, workers=2)
+
+        np.testing.assert_allclose(parallel.lambdas, serial.lambdas)
+        np.testing.assert_allclose(parallel.energies, serial.energies)
+        self.assertAlmostEqual(parallel.t2, serial.t2)
+        self.assertAlmostEqual(parallel.p_value, serial.p_value)

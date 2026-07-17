@@ -12,9 +12,14 @@ class CorrelatedData:
 
     def __init__(
         self,
-        means: List[npt.NDArray],
-        covs: List[List[npt.NDArray]],
+        means: List[npt.NDArray] | npt.NDArray,
+        covs: List[List[npt.NDArray]] | npt.NDArray,
     ) -> None:
+        if isinstance(means, np.ndarray):
+            if not isinstance(covs, np.ndarray):
+                raise TypeError("single mean requires a single covariance matrix")
+            means = [means]
+            covs = [[covs]]
         n = len(means)
         if n == 0:
             raise ValueError("mean list is empty")
@@ -91,6 +96,10 @@ class CorrelatedData:
         self._validate_index(j)
         return self._cov_block(i, j)
 
+    @property
+    def covs(self) -> List[List[npt.NDArray]]:
+        return self._covs
+
     def uncorrelated(self) -> "CorrelatedData":
         cov = [
             [
@@ -130,8 +139,10 @@ class CorrelatedData:
 
 
 def make_correlated_data(
-    data: List[BootstrapArray] | List[npt.NDArray],
+    data: List[BootstrapArray] | List[npt.NDArray] | BootstrapArray | npt.NDArray,
 ) -> CorrelatedData:
+    if isinstance(data, np.ndarray):
+        data = [data]
     if not data:
         raise ValueError("data list is empty")
 

@@ -1,5 +1,8 @@
 import math
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
+from functools import partial
 from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -227,16 +230,46 @@ def _lfilter_spectrum(
     return spectrum
 
 
-def lfilter_spectrum(
-    data: CorrelatedData | List[BootstrapArray],
+def _spectrum_batch(
+    indices: npt.NDArray,
+    samples: List[npt.NDArray],
+    covs: List[List[npt.NDArray]],
     ranges: List[Tuple[int, int]],
+    n_state: int,
+    initial_lambdas: npt.NDArray,
+    init_lambda: float,
+    ncall: int,
+) -> Tuple[npt.NDArray, npt.NDArray]:
+    lambdas = np.empty((len(indices), n_state))
+    energies = np.empty_like(lambdas)
+    for row, index in enumerate(indices):
+        sample_data = CorrelatedData([sample[index] for sample in samples], covs)
+        spectrum = _lfilter_spectrum(
+            sample_data,
+            ranges,
+            n_state,
+            initial_lambdas=initial_lambdas,
+            init_lambda=init_lambda,
+            ncall=ncall,
+        )
+        lambdas[row] = spectrum.lambdas
+        energies[row] = spectrum.energies
+    return lambdas, energies
+
+
+def lfilter_spectrum(
+    data: CorrelatedData | List[BootstrapArray] | BootstrapArray,
+    ranges: List[Tuple[int, int]] | Tuple[int, int],
     n_state: int,
     *,
     m_guess: Optional[float] = None,
     initial_lambdas: Optional[npt.NDArray] = None,
     init_lambda: float = 100.0,
     ncall: int = 5000,
+    workers: int = 1,
 ) -> LaplaceFilterSpectrum:
+    if isinstance(ranges, tuple):
+        ranges = [ranges]
     if isinstance(data, CorrelatedData):
         return _lfilter_spectrum(
             data,
@@ -247,12 +280,16 @@ def lfilter_spectrum(
             init_lambda=init_lambda,
             ncall=ncall,
         )
+    if isinstance(data, BootstrapArray):
+        data = [data]
     if not isinstance(data, list):
         raise TypeError("data must be CorrelatedData or a list of BootstrapArray")
     if not data:
         raise ValueError("bootstrap data list is empty")
     if not all(isinstance(datum, BootstrapArray) for datum in data):
         raise TypeError("data must be CorrelatedData or a list of BootstrapArray")
+    if workers < 1:
+        raise ValueError("workers must be positive")
 
     corr_data = make_correlated_data(data)
     n_bootstrap = data[0].samples.shape[0]
@@ -269,18 +306,51 @@ def lfilter_spectrum(
     )
     lambdas[0] = central.lambdas
     energies[0] = central.energies
-    for sample in range(n_bootstrap):
-        corr_data.set_means([bootstrap.samples[sample] for bootstrap in data])
-        replica = _lfilter_spectrum(
-            corr_data,
-            ranges,
-            n_state,
+    samples = [bootstrap.samples for bootstrap in data]
+    if workers == 1:
+        for sample in range(n_bootstrap):
+            corr_data.set_means([values[sample] for values in samples])
+            fit = _lfilter_spectrum(
+                corr_data,
+                ranges,
+                n_state,
+                initial_lambdas=central.lambdas,
+                init_lambda=init_lambda,
+                ncall=ncall,
+            )
+            lambdas[sample + 1] = fit.lambdas
+            energies[sample + 1] = fit.energies
+    else:
+        workers = min(workers, n_bootstrap)
+        covs = corr_data.covs
+        batches = [
+            batch
+            for batch in np.array_split(np.arange(n_bootstrap), workers)
+            if len(batch)
+        ]
+        try:
+            context = mp.get_context("fork")
+        except ValueError:
+            context = None
+        fit_batch = partial(
+            _spectrum_batch,
+            samples=samples,
+            covs=covs,
+            ranges=ranges,
+            n_state=n_state,
             initial_lambdas=central.lambdas,
             init_lambda=init_lambda,
             ncall=ncall,
         )
-        lambdas[sample + 1] = replica.lambdas
-        energies[sample + 1] = replica.energies
+        with ProcessPoolExecutor(
+            max_workers=workers,
+            mp_context=context,
+        ) as executor:
+            for indices, (batch_lambdas, batch_energies) in zip(
+                batches, executor.map(fit_batch, batches)
+            ):
+                lambdas[indices + 1] = batch_lambdas
+                energies[indices + 1] = batch_energies
     return LaplaceFilterSpectrum(
         energies=BootstrapArray(energies),
         lambdas=BootstrapArray(lambdas),
