@@ -1,8 +1,9 @@
-from typing import Sequence, Tuple, TypeAlias
+from typing import Literal, Sequence, Tuple, TypeAlias
 
 import numpy as np
 import numpy.typing as npt
 
+from latan.statistics.correlated_data import CorrelatedData
 from latan.statistics.correlation import (
     cov_factor,
     cov_independent_residuals,
@@ -34,6 +35,9 @@ class Chi2:
     _xydata: XYData
     _model: Model
     _n_par: int
+    _covariance_mode: Literal["full", "diagonal"]
+    _include: PointRanges | None
+    _exclude: PointRanges | None
     _mask: npt.NDArray[np.bool_]
     _point_indices: npt.NDArray[np.intp]
     _inexact_x_dim: Tuple[int, ...]
@@ -41,12 +45,13 @@ class Chi2:
     _x_buf: npt.NDArray
     _y_buf: npt.NDArray
     _var_buffer: npt.NDArray
-    _cov: npt.NDArray
-    _factor: Tuple[npt.NDArray, npt.NDArray]
+    _cov: npt.NDArray | None
+    _factor: Tuple[npt.NDArray, npt.NDArray] | None
+    _err: npt.NDArray
     _residual: npt.NDArray
     _x_residual: npt.NDArray
     _y_residual: npt.NDArray
-    _work: npt.NDArray
+    _work: npt.NDArray | None
 
     def __init__(
         self,
@@ -55,6 +60,7 @@ class Chi2:
         *,
         include: PointRanges | None = None,
         exclude: PointRanges | None = None,
+        covariance: Literal["full", "diagonal"] = "full",
     ) -> None:
         """Create a chi-squared function for correlated x/y data.
 
@@ -69,16 +75,24 @@ class Chi2:
             include: Closed x-coordinate ranges defining initially retained
                 points. `None` selects every point.
             exclude: Closed x-coordinate ranges removed after `include`.
+            covariance: Use `"full"` for the full covariance matrix or
+                `"diagonal"` to ignore every covariance correlation.
         """
         if model.n_var != data.x_ndim:
             raise ValueError(
                 f"model has {model.n_var} variables, expected {data.x_ndim}"
             )
+        if covariance not in ("full", "diagonal"):
+            raise ValueError('covariance must be "full" or "diagonal"')
+        covariance_mode = covariance
 
         self._xydata = data
         self._model = model
         self._n_par = model.n_par
-        self._mask = data.point_mask(include, exclude)
+        self._covariance_mode = covariance_mode
+        self._include = tuple(include) if include is not None else None
+        self._exclude = tuple(exclude) if exclude is not None else None
+        self._mask = data.point_mask(self._include, self._exclude)
         self._point_indices = np.flatnonzero(self._mask)
         n_points = self._point_indices.size
 
@@ -98,20 +112,54 @@ class Chi2:
 
         # cache mean and covariance from data for selected fit points
         quantities = list(self._x_indices) + list(data.y_indices)
-        mean, covariance = data.data.total_mean_cov(
-            indices=[self._point_indices] * (data.x_inexact_ndim + data.y_ndim),
-            quantities=quantities,
-        )
+        if covariance_mode == "full":
+            mean, selected_covariance = data.data.total_mean_cov(
+                indices=[self._point_indices] * (data.x_inexact_ndim + data.y_ndim),
+                quantities=quantities,
+            )
+            self._err = np.sqrt(selected_covariance.diagonal())
+        else:
+            mean = np.concatenate([
+                data.data.mean(quantity)[self._point_indices] for quantity in quantities
+            ])
+            self._err = np.concatenate([
+                np.sqrt(data.data.cov(quantity, quantity).diagonal())[
+                    self._point_indices
+                ]
+                for quantity in quantities
+            ])
 
+        # initialise buffers for chi^2 evaluation
         n_x = data.x_inexact_ndim * n_points
         self._x_buf = mean[:n_x].reshape(data.x_inexact_ndim, n_points).T
         self._y_buf = mean[n_x:].reshape(data.y_ndim, n_points).T
-        self._cov = covariance
-        self._factor = cov_factor(covariance)
-        self._residual = np.empty(covariance.shape[0])
-        self._x_residual = self._residual[:n_x].reshape(data.x_inexact_ndim, n_points).T
-        self._y_residual = self._residual[n_x:].reshape(data.y_ndim, n_points).T
-        self._work = np.empty_like(self._residual)
+        if covariance_mode == "full":
+            self._cov = selected_covariance
+            self._factor = cov_factor(selected_covariance)
+            self._work = np.empty(selected_covariance.shape[0])
+        else:
+            if np.any(self._err <= 0.0):
+                raise ValueError("diagonal covariance entries must be positive")
+            self._cov = None
+            self._factor = None
+            self._work = None
+        self._residual = np.empty(mean.size)
+        self._reset_residual_views()
+
+    # recreate x/y views on residuals
+    def _reset_residual_views(self) -> None:
+        n_x = self._x_buf.size
+        self._x_residual = (
+            self._residual[:n_x].reshape(self._xydata.x_inexact_ndim, self.n_points).T
+        )
+        self._y_residual = (
+            self._residual[n_x:].reshape(self._xydata.y_ndim, self.n_points).T
+        )
+
+    # re-creation of x/y views after serialization (necessary for parallel fits)
+    def __setstate__(self, state: dict) -> None:
+        self.__dict__.update(state)
+        self._reset_residual_views()
 
     def set_means(self, means: Sequence[npt.NDArray]) -> None:
         """Update stochastic means while retaining the selected covariance.
@@ -163,6 +211,49 @@ class Chi2:
             )
         return np.concatenate((model_parameters, self._x_buf.ravel()))
 
+    def uncorrelated(self, exact_x: bool = False) -> "Chi2":
+        """Return an uncorrelated chi-squared function for selected points.
+
+        Args:
+            exact_x: If true, treat every observed x coordinate as exact and
+                remove its latent fit parameters. If false, retain stochastic
+                x coordinates while removing all covariance correlations.
+        """
+        if not exact_x:
+            return Chi2(
+                self._xydata,
+                self._model,
+                include=self._include,
+                exclude=self._exclude,
+                covariance="diagonal",
+            )
+
+        x: list[npt.NDArray] = []
+        inexact_x = 0
+        for i in range(self._xydata.x_ndim):
+            if self._xydata.is_exact_x(i):
+                x.append(self._xydata.x(i)[self._mask].copy())
+            else:
+                x.append(self._x_buf[:, inexact_x].copy())
+                inexact_x += 1
+
+        means = [self._y_buf[:, i].copy() for i in range(self._xydata.y_ndim)]
+        covs = [
+            [
+                self._xydata.data.cov(i, j)[
+                    np.ix_(self._point_indices, self._point_indices)
+                ]
+                for j in self._xydata.y_indices[row:]
+            ]
+            for row, i in enumerate(self._xydata.y_indices)
+        ]
+        y_indices = tuple(range(self._xydata.y_ndim))
+        return Chi2(
+            XYData(CorrelatedData(means, covs), x=x, y_indices=y_indices),
+            self._model,
+            covariance="diagonal",
+        )
+
     def _set_residual(self, parameters: npt.NDArray) -> None:
         if parameters.ndim != 1:
             raise ValueError("parameters must be one-dimensional")
@@ -203,14 +294,21 @@ class Chi2:
         `self(parameters)`.
         """
         self._set_residual(parameters)
-        cov_independent_residuals(
-            self._residual, self._cov, self._factor, self._work
-        )
+        if self._covariance_mode == "diagonal":
+            return self._residual / self._err
+        assert self._cov is not None
+        assert self._factor is not None
+        assert self._work is not None
+        cov_independent_residuals(self._residual, self._cov, self._factor, self._work)
         return self._work.copy()
 
     def __call__(self, parameters: npt.NDArray) -> float:
         """Evaluate chi-squared for physical and latent-x parameters."""
         self._set_residual(parameters)
-        return cov_quadratic_form(
-            self._residual, self._cov, self._factor, self._work
-        )
+        if self._covariance_mode == "diagonal":
+            standardized = self._residual / self._err
+            return float(standardized @ standardized)
+        assert self._cov is not None
+        assert self._factor is not None
+        assert self._work is not None
+        return cov_quadratic_form(self._residual, self._cov, self._factor, self._work)
