@@ -4,9 +4,9 @@ import numpy as np
 import numpy.typing as npt
 
 from latan.statistics.correlation import (
-    corr_factor,
-    corr_independent_residuals,
-    corr_quadratic_form,
+    cov_factor,
+    cov_independent_residuals,
+    cov_quadratic_form,
 )
 from latan.statistics.model import Model
 from latan.statistics.xy_data import XYData
@@ -107,7 +107,7 @@ class Chi2:
         self._x_buf = mean[:n_x].reshape(data.x_inexact_ndim, n_points).T
         self._y_buf = mean[n_x:].reshape(data.y_ndim, n_points).T
         self._cov = covariance
-        self._factor = corr_factor(covariance)
+        self._factor = cov_factor(covariance)
         self._residual = np.empty(covariance.shape[0])
         self._x_residual = self._residual[:n_x].reshape(data.x_inexact_ndim, n_points).T
         self._y_residual = self._residual[n_x:].reshape(data.y_ndim, n_points).T
@@ -203,7 +203,7 @@ class Chi2:
         `self(parameters)`.
         """
         self._set_residual(parameters)
-        corr_independent_residuals(
+        cov_independent_residuals(
             self._residual, self._cov, self._factor, self._work
         )
         return self._work.copy()
@@ -211,6 +211,6 @@ class Chi2:
     def __call__(self, parameters: npt.NDArray) -> float:
         """Evaluate chi-squared for physical and latent-x parameters."""
         self._set_residual(parameters)
-        return corr_quadratic_form(
+        return cov_quadratic_form(
             self._residual, self._cov, self._factor, self._work
         )

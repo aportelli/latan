@@ -5,7 +5,7 @@ import numpy.typing as npt
 
 from latan.physics.laplace_filter.filter import lfilter
 from latan.statistics.correlated_data import CorrelatedData
-from latan.statistics.correlation import corr_factor, corr_quadratic_form
+from latan.statistics.correlation import cov_quadratic_form
 
 
 class LaplaceFilteredT2:
@@ -32,10 +32,6 @@ class LaplaceFilteredT2:
     def ranges(self) -> Tuple[Tuple[int, int], ...]:
         return tuple(self._ranges)
 
-    def _t2_kernel(self, mean, cov) -> float:
-        factor = corr_factor(cov)
-        return corr_quadratic_form(mean, cov, factor)
-
     def __call__(self, lamb: npt.NDArray) -> float:
         for i in range(self._data.n_quantities):
             lfilter(self._data.mean(i), lamb, out=self._filtered_data.mean(i))
@@ -47,4 +43,4 @@ class LaplaceFilteredT2:
                     out=self._filtered_data.cov(i, j),
                 )
         mean_f, cov_f = self._filtered_data.total_mean_cov(self._ranges)
-        return self._t2_kernel(mean_f, cov_f)
+        return cov_quadratic_form(mean_f, cov_f)

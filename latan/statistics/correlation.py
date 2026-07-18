@@ -22,7 +22,7 @@ def corr_to_cov(corr: npt.NDArray, err: npt.NDArray) -> npt.NDArray:
     return corr * np.outer(err, err)
 
 
-def corr_factor(
+def cov_factor(
     cov: npt.NDArray,
 ) -> Tuple[npt.NDArray, npt.NDArray]:
     """Return a lower correlation Cholesky factor and standard deviations."""
@@ -65,7 +65,7 @@ def _corr_independent_residuals(
         out[i] = value / factor[i, i]
 
 
-def corr_independent_residuals(
+def cov_independent_residuals(
     residual: npt.NDArray,
     cov: npt.NDArray,
     factor: Tuple[npt.NDArray, npt.NDArray] | None = None,
@@ -77,7 +77,7 @@ def corr_independent_residuals(
         residual: Residual vector.
         cov: Covariance matrix corresponding to `residual`.
         factor: Optional lower Cholesky factor and standard deviations of the
-            associated correlation matrix, as returned by `corr_factor`.
+            associated correlation matrix, as returned by `cov_factor`.
             It is computed from `cov` when omitted.
         out: Optional one-dimensional output array with the same shape as
             `residual`. Supplying a reusable array avoids an allocation. Its
@@ -88,7 +88,7 @@ def corr_independent_residuals(
         covariance-normalized quadratic form.
     """
     if factor is None:
-        factor = corr_factor(cov)
+        factor = cov_factor(cov)
     lower, err = factor
     if out is None:
         out = np.empty_like(residual)
@@ -96,7 +96,7 @@ def corr_independent_residuals(
     return out
 
 
-def corr_quadratic_form(
+def cov_quadratic_form(
     residual: npt.NDArray,
     cov: npt.NDArray,
     factor: Tuple[npt.NDArray, npt.NDArray] | None = None,
@@ -108,14 +108,14 @@ def corr_quadratic_form(
         residual: Residual vector.
         cov: Covariance matrix corresponding to `residual`.
         factor: Optional lower Cholesky factor and standard deviations of the
-            associated correlation matrix, as returned by `corr_factor`.
+            associated correlation matrix, as returned by `cov_factor`.
             It is computed from `cov` when omitted.
         work: Optional one-dimensional workspace with the same shape as
             `residual`. Supplying a reusable array avoids an allocation for
             each evaluation. Its contents are overwritten.
     """
     if factor is None:
-        factor = corr_factor(cov)
+        factor = cov_factor(cov)
     lower, err = factor
     if work is None:
         work = np.empty_like(residual)
