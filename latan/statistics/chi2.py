@@ -5,6 +5,7 @@ import numpy.typing as npt
 
 from latan.statistics.correlation import (
     corr_factor,
+    corr_independent_residuals,
     corr_quadratic_form,
 )
 from latan.statistics.model import Model
@@ -40,8 +41,8 @@ class Chi2:
     _x_buf: npt.NDArray
     _y_buf: npt.NDArray
     _var_buffer: npt.NDArray
-    _err: npt.NDArray
-    _factor: npt.NDArray
+    _cov: npt.NDArray
+    _factor: Tuple[npt.NDArray, npt.NDArray]
     _residual: npt.NDArray
     _x_residual: npt.NDArray
     _y_residual: npt.NDArray
@@ -105,7 +106,8 @@ class Chi2:
         n_x = data.x_inexact_ndim * n_points
         self._x_buf = mean[:n_x].reshape(data.x_inexact_ndim, n_points).T
         self._y_buf = mean[n_x:].reshape(data.y_ndim, n_points).T
-        self._err, self._factor = corr_factor(covariance)
+        self._cov = covariance
+        self._factor = corr_factor(covariance)
         self._residual = np.empty(covariance.shape[0])
         self._x_residual = self._residual[:n_x].reshape(data.x_inexact_ndim, n_points).T
         self._y_residual = self._residual[n_x:].reshape(data.y_ndim, n_points).T
@@ -161,8 +163,7 @@ class Chi2:
             )
         return np.concatenate((model_parameters, self._x_buf.ravel()))
 
-    def __call__(self, parameters: npt.NDArray) -> float:
-        """Evaluate chi-squared for physical and latent-x parameters."""
+    def _set_residual(self, parameters: npt.NDArray) -> None:
         if parameters.ndim != 1:
             raise ValueError("parameters must be one-dimensional")
         if parameters.size != self.n_parameters:
@@ -190,7 +191,26 @@ class Chi2:
                 f"model returned shape {prediction.shape}, expected {self._y_buf.shape}"
             )
 
-        # compute chi^2
         np.subtract(self._x_buf, latent_x, out=self._x_residual)
         np.subtract(self._y_buf, prediction, out=self._y_residual)
-        return corr_quadratic_form(self._residual, self._err, self._factor, self._work)
+
+    def residual(self, parameters: npt.NDArray) -> npt.NDArray:
+        """Return statistically independent residuals for `parameters`.
+
+        The returned vector is independent from the internal work buffers, so
+        it is safe to pass to solvers such as `scipy.optimize.least_squares`
+        that may retain it between calls. Its squared Euclidean norm equals
+        `self(parameters)`.
+        """
+        self._set_residual(parameters)
+        corr_independent_residuals(
+            self._residual, self._cov, self._factor, self._work
+        )
+        return self._work.copy()
+
+    def __call__(self, parameters: npt.NDArray) -> float:
+        """Evaluate chi-squared for physical and latent-x parameters."""
+        self._set_residual(parameters)
+        return corr_quadratic_form(
+            self._residual, self._cov, self._factor, self._work
+        )

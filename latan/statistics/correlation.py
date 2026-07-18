@@ -11,24 +11,24 @@ def cdr(mat: npt.NDArray) -> float:
     return 10.0 * np.log10(s.max() / s.min())
 
 
-def var_to_corr(var: npt.NDArray) -> Tuple[npt.NDArray, npt.NDArray]:
-    err = np.sqrt(var.diagonal())
+def cov_to_corr(cov: npt.NDArray) -> Tuple[npt.NDArray, npt.NDArray]:
+    err = np.sqrt(cov.diagonal())
     inverr = 1.0 / err
-    corr = var * np.outer(inverr, inverr)
+    corr = cov * np.outer(inverr, inverr)
     return corr, err
 
 
-def corr_to_var(corr: npt.NDArray, err: npt.NDArray) -> npt.NDArray:
+def corr_to_cov(corr: npt.NDArray, err: npt.NDArray) -> npt.NDArray:
     return corr * np.outer(err, err)
 
 
 def corr_factor(
     cov: npt.NDArray,
 ) -> Tuple[npt.NDArray, npt.NDArray]:
-    """Return standard deviations and a lower Cholesky factor of a correlation matrix."""
-    corr, err = var_to_corr(cov)
+    """Return a lower correlation Cholesky factor and standard deviations."""
+    corr, err = cov_to_corr(cov)
     factor = linalg.cholesky(corr, lower=True, check_finite=False)
-    return err, factor
+    return factor, err
 
 
 # Compiled direct forward-substitution algorithm
@@ -51,22 +51,72 @@ def _corr_quadratic_form(
     return total
 
 
-def corr_quadratic_form(
+@njit(cache=True)
+def _corr_independent_residuals(
     residual: npt.NDArray,
     err: npt.NDArray,
     factor: npt.NDArray,
+    out: npt.NDArray,
+) -> None:
+    for i in range(residual.size):
+        value = residual[i] / err[i]
+        for j in range(i):
+            value -= factor[i, j] * out[j]
+        out[i] = value / factor[i, i]
+
+
+def corr_independent_residuals(
+    residual: npt.NDArray,
+    cov: npt.NDArray,
+    factor: Tuple[npt.NDArray, npt.NDArray] | None = None,
+    out: npt.NDArray | None = None,
+) -> npt.NDArray:
+    """Return statistically independent residuals.
+
+    Args:
+        residual: Residual vector.
+        cov: Covariance matrix corresponding to `residual`.
+        factor: Optional lower Cholesky factor and standard deviations of the
+            associated correlation matrix, as returned by `corr_factor`.
+            It is computed from `cov` when omitted.
+        out: Optional one-dimensional output array with the same shape as
+            `residual`. Supplying a reusable array avoids an allocation. Its
+            contents are overwritten.
+
+    Returns:
+        Independent residuals whose squared Euclidean norm is the
+        covariance-normalized quadratic form.
+    """
+    if factor is None:
+        factor = corr_factor(cov)
+    lower, err = factor
+    if out is None:
+        out = np.empty_like(residual)
+    _corr_independent_residuals(residual, err, lower, out)
+    return out
+
+
+def corr_quadratic_form(
+    residual: npt.NDArray,
+    cov: npt.NDArray,
+    factor: Tuple[npt.NDArray, npt.NDArray] | None = None,
     work: npt.NDArray | None = None,
 ) -> float:
     """Evaluate a covariance-normalized quadratic form from a lower factor.
 
     Args:
         residual: Residual vector.
-        err: Standard deviations corresponding to `residual`.
-        factor: Lower Cholesky factor of the associated correlation matrix.
+        cov: Covariance matrix corresponding to `residual`.
+        factor: Optional lower Cholesky factor and standard deviations of the
+            associated correlation matrix, as returned by `corr_factor`.
+            It is computed from `cov` when omitted.
         work: Optional one-dimensional workspace with the same shape as
             `residual`. Supplying a reusable array avoids an allocation for
             each evaluation. Its contents are overwritten.
     """
+    if factor is None:
+        factor = corr_factor(cov)
+    lower, err = factor
     if work is None:
         work = np.empty_like(residual)
-    return _corr_quadratic_form(residual, err, factor, work)
+    return _corr_quadratic_form(residual, err, lower, work)

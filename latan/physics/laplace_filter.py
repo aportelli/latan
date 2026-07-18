@@ -124,8 +124,8 @@ class LaplaceFilteredT2:
         return tuple(self._ranges)
 
     def _t2_kernel(self, mean, cov) -> float:
-        err, factor = corr_factor(cov)
-        return corr_quadratic_form(mean, err, factor)
+        factor = corr_factor(cov)
+        return corr_quadratic_form(mean, cov, factor)
 
     def __call__(self, lamb: npt.NDArray) -> float:
         for i in range(self._data.n_quantities):

@@ -39,3 +39,5 @@ class TestChi2(unittest.TestCase):
         expected = float(residual @ np.linalg.solve(covariance, residual))
 
         self.assertAlmostEqual(chi2(parameters), expected)
+        independent_residuals = chi2.residual(parameters)
+        self.assertAlmostEqual(float(independent_residuals @ independent_residuals), expected)
