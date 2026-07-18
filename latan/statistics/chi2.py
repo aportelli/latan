@@ -43,6 +43,8 @@ class Chi2:
     _err: npt.NDArray
     _factor: npt.NDArray
     _residual: npt.NDArray
+    _x_residual: npt.NDArray
+    _y_residual: npt.NDArray
     _work: npt.NDArray
 
     def __init__(
@@ -105,6 +107,8 @@ class Chi2:
         self._y_buf = mean[n_x:].reshape(data.y_ndim, n_points).T
         self._err, self._factor = corr_factor(covariance)
         self._residual = np.empty(covariance.shape[0])
+        self._x_residual = self._residual[:n_x].reshape(data.x_inexact_ndim, n_points).T
+        self._y_residual = self._residual[n_x:].reshape(data.y_ndim, n_points).T
         self._work = np.empty_like(self._residual)
 
     def set_means(self, means: Sequence[npt.NDArray]) -> None:
@@ -172,10 +176,9 @@ class Chi2:
         latent_x = parameters[self._n_par :].reshape(self._x_buf.shape)
 
         # evaluate model
-        self._var_buffer[:, self._inexact_x_dim] = latent_x
-        prediction = np.asarray(
-            self._model(self._var_buffer, model_parameters), dtype=float
-        )
+        for source, target in enumerate(self._inexact_x_dim):
+            self._var_buffer[:, target] = latent_x[:, source]
+        prediction = self._model._function(self._var_buffer, model_parameters)
 
         # scalar model support
         if self._y_buf.shape[1] == 1 and prediction.shape == (self.n_points,):
@@ -188,9 +191,6 @@ class Chi2:
             )
 
         # compute chi^2
-        n_x = self._x_buf.size
-        self._residual[:n_x] = (self._x_buf - latent_x).T.ravel()
-        self._residual[n_x:] = (self._y_buf - prediction).T.ravel()
-        return corr_quadratic_form(
-            self._residual, self._err, self._factor, self._work
-        )
+        np.subtract(self._x_buf, latent_x, out=self._x_residual)
+        np.subtract(self._y_buf, prediction, out=self._y_residual)
+        return corr_quadratic_form(self._residual, self._err, self._factor, self._work)
