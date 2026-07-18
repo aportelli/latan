@@ -9,11 +9,11 @@ import numpy as np
 import numpy.typing as npt
 from iminuit import Minuit
 from numba import njit
-from scipy import linalg, stats
+from scipy import stats
 
 from latan.statistics.bootstrap import BootstrapArray
 from latan.statistics.correlated_data import CorrelatedData, make_correlated_data
-from latan.statistics.correlation import var_to_corr
+from latan.statistics.correlation import corr_factor, corr_quadratic_form
 
 
 @njit(cache=True)
@@ -124,11 +124,8 @@ class LaplaceFilteredT2:
         return tuple(self._ranges)
 
     def _t2_kernel(self, mean, cov) -> float:
-        corr, err = var_to_corr(cov)
-        mean_norm = mean / err
-        factor, lower = linalg.cho_factor(corr, check_finite=False)
-        solved = linalg.cho_solve((factor, lower), mean_norm, check_finite=False)
-        return (mean_norm @ solved).item()
+        err, factor = corr_factor(cov)
+        return corr_quadratic_form(mean, err, factor)
 
     def __call__(self, lamb: npt.NDArray) -> float:
         for i in range(self._data.n_quantities):
