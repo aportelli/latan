@@ -1,4 +1,4 @@
-from numbers import Real
+from numbers import Integral, Real
 from typing import Optional, Sequence, Tuple
 
 import numpy as np
@@ -8,91 +8,163 @@ from latan.statistics.correlated_data import CorrelatedData
 
 
 class XYData:
-    """Joint data for a pointwise relationship between `x` and `y`.
+    """Joint data for a relationship between x coordinates and y points.
 
-    All coordinates have the same number of points. Point `i` is one input
-    vector `x[i]` paired with one output vector `y[i]`.
-
-    The wrapped `CorrelatedData` contains every stochastic x coordinate and
-    every y coordinate, including their cross-covariance blocks. An array in
-    `x` is an exact coordinate and is not stored in that covariance data.
-    Integer entries in `x` and all entries in `y_indices` identify
-    stochastic quantities in the wrapped data.
+    Every y coordinate has one value per observation point. Each x coordinate
+    may instead have fewer raw values, which `x_map` assigns to observations.
+    This supports one shared stochastic x value used by many y points without
+    duplicating it in the covariance matrix.
 
     Example:
         ```python
-        # joint holds one stochastic x coordinate (0) and one y coordinate (1).
+        # Three stochastic x values are shared by five y values.
+        x_values = np.array([0.0, 0.5, 1.0])
+        y_values = np.array([1.1, 0.9, 1.8, 2.7, 2.5])
         joint = CorrelatedData(
-            means=[np.array([1.0, 2.0]), np.array([3.0, 4.0])],
-            covs=[[np.eye(2), np.zeros((2, 2))], [np.eye(2)]],
+            means=[x_values, y_values],
+            covs=[[cov_xx, cov_xy], [cov_yy]],
         )
-        # The first x coordinate is exact; the second is joint quantity 0.
-        data = XYData(joint, x=[np.array([0.0, 1.0]), 0], y_indices=[1])
+        data = XYData(
+            joint,
+            x=[0],
+            y_indices=[1],
+            x_map=[np.array([0, 0, 1, 2, 2])],
+            x_names=["x"],
+            y_names=["y"],
+        )
+        # The five points are:
+        # (0.0, 1.1), (0.0, 0.9), (0.5, 1.8), (1.0, 2.7), (1.0, 2.5).
         ```
     """
 
     _data: CorrelatedData
     _x: Tuple[int | npt.NDArray, ...]
+    _x_map: Tuple[npt.NDArray, ...]
     _y_indices: Tuple[int, ...]
+    _x_names: Tuple[str, ...]
+    _y_names: Tuple[str, ...]
+    _n_points: int
+    _exact_x: frozenset[int]
 
     def __init__(
         self,
         data: CorrelatedData,
         x: Sequence[int | npt.NDArray],
         y_indices: Sequence[int],
+        *,
+        x_map: Sequence[int | npt.NDArray | None] | None = None,
+        x_names: Sequence[str] | None = None,
+        y_names: Sequence[str] | None = None,
     ) -> None:
-        """Create data for a pointwise relationship between x and y.
+        """Create x/y data with optional x-to-observation mappings.
 
         Args:
             data: Joint correlated data containing every stochastic x and y
-                coordinate. Each quantity must have shape
-                `(n_points,)`. Its covariance blocks retain all correlations
-                between stochastic coordinates.
-            x: One entry per x coordinate. An integer is the index of a
-                stochastic quantity in `data`. A NumPy array with shape
-                `(n_points,)` is an exact coordinate and is excluded from
-                `data` and its covariance blocks.
-            y_indices: Integer indices of y quantities in `data`. Together
-                with the stochastic x indices, these must be a disjoint
-                partition of every quantity in `data`.
+                coordinate. Y quantities must have shape `(n_points,)`.
+            x: One entry per x coordinate. An integer identifies a stochastic
+                quantity in `data`; an array supplies exact raw x values.
+            y_indices: Indices of y quantities in `data`. Together with
+                stochastic x indices, they must partition `data`.
+            x_map: One map per x coordinate. `None` uses the identity map,
+                an integer uses one raw x value for every observation, and an
+                integer array maps every observation to a raw x value.
+            x_names: Optional names for x coordinates. Defaults to `x0`,
+                `x1`, and so on.
+            y_names: Optional names for y coordinates. Defaults to `y0`,
+                `y1`, and so on.
         """
+        # validate no empty data was provided
         x = tuple(x)
         y_indices = tuple(y_indices)
         if not x or not y_indices:
             raise ValueError("x and y_indices must not be empty")
 
+        # separate exact x values and inexact x indices
         x_indices: list[int] = []
-        for i, value in enumerate(x):
-            if isinstance(value, np.ndarray):
-                if value.ndim != 1:
+        exact_x: list[int] = []
+        for i, val in enumerate(x):
+            if isinstance(val, np.ndarray):
+                if val.ndim != 1:
                     raise ValueError(f"exact x coordinate {i} is not one-dimensional")
+                exact_x.append(i)
             else:
-                x_indices.append(int(value))
-        if not all(isinstance(index, (int, np.integer)) for index in y_indices):
-            raise TypeError("y_indices must contain integer quantity indices")
-        y_indices = tuple(int(index) for index in y_indices)
+                x_indices.append(val)
 
+        # validate inexact x & y indices
         indices = (*x_indices, *y_indices)
         if len(set(indices)) != len(indices):
             raise ValueError("stochastic x and y indices must be disjoint and unique")
         if set(indices) != set(range(data.n_quantities)):
             raise ValueError("stochastic x and y indices must partition all quantities")
 
-        sizes = [
-            value.size if isinstance(value, np.ndarray) else data.mean(value).size
-            for value in x
-        ]
-        sizes += [data.mean(index).size for index in y_indices]
-        if len(set(sizes)) != 1:
-            raise ValueError("all x and y coordinates must have the same size")
+        # validate y data size
+        y_sizes = [data.mean(index).size for index in y_indices]
+        if len(set(y_sizes)) != 1:
+            raise ValueError("all y coordinates must have the same size")
+        n_points = y_sizes[0]
+
+        if x_map is None:
+            x_map = (None,) * len(x)
+        else:
+            x_map = tuple(x_map)
+            if len(x_map) != len(x):
+                raise ValueError(f"x_map has {len(x_map)} entries, expected {len(x)}")
+
+        # normalised list of x maps, each of shape (n_points,)
+        maps: list[npt.NDArray] = []
+        for i, (val, m) in enumerate(zip(x, x_map)):
+            raw_size = val.size if isinstance(val, np.ndarray) else data.mean(val).size
+            if m is None:
+                if raw_size != n_points:
+                    raise ValueError(
+                        f"x coordinate {i} has {raw_size} raw values and None was provided as a map; "
+                        f"data with less than {n_points} values require a map"
+                    )
+                map = np.arange(n_points, dtype=np.intp)
+            elif isinstance(m, np.ndarray):
+                map = m
+                if map.ndim != 1 or map.size != n_points:
+                    raise ValueError(f"x_map entry {i} must have shape ({n_points},)")
+                if not np.issubdtype(map.dtype, np.integer):
+                    raise TypeError(f"x_map entry {i} must contain integer indices")
+            else:
+                assert isinstance(m, Integral)
+                map = np.full(n_points, m, dtype=np.intp)
+            if np.any(map < 0) or np.any(map >= raw_size):
+                raise IndexError(f"x_map entry {i} contains indices out of range")
+            maps.append(map)
+
+        def normalize_names(
+            names: Sequence[str] | None, count: int, prefix: str
+        ) -> Tuple[str, ...]:
+            if names is None:
+                return tuple(f"{prefix}{i}" for i in range(count))
+            names = tuple(names)
+            if len(names) != count:
+                raise ValueError(
+                    f"{prefix}_names has {len(names)} entries, expected {count}"
+                )
+            if len(set(names)) != len(names):
+                raise ValueError(f"{prefix}_names must be unique")
+            return names
 
         self._data = data
         self._x = x
+        self._x_map = tuple(maps)
         self._y_indices = y_indices
+        self._x_names = normalize_names(x_names, len(x), "x")
+        self._y_names = normalize_names(y_names, len(y_indices), "y")
+        self._n_points = n_points
+        self._exact_x = frozenset(exact_x)
 
     @property
     def data(self) -> CorrelatedData:
         return self._data
+
+    @property
+    def n_points(self) -> int:
+        """Number of y observation points."""
+        return self._n_points
 
     @property
     def x_ndim(self) -> int:
@@ -107,7 +179,7 @@ class XYData:
     @property
     def x_exact_ndim(self) -> int:
         """Number of exact x coordinates."""
-        return len(self.exact_x)
+        return len(self._exact_x)
 
     @property
     def y_ndim(self) -> int:
@@ -125,16 +197,31 @@ class XYData:
         return self._y_indices
 
     @property
-    def exact_x(self) -> frozenset[int]:
-        return frozenset(
-            index
-            for index, value in enumerate(self._x)
-            if isinstance(value, np.ndarray)
-        )
+    def x_names(self) -> Tuple[str, ...]:
+        """Names of x coordinates."""
+        return self._x_names
 
-    def x(self, index: int = 0) -> npt.NDArray:
+    @property
+    def y_names(self) -> Tuple[str, ...]:
+        """Names of y coordinates."""
+        return self._y_names
+
+    @property
+    def exact_x(self) -> frozenset[int]:
+        return self._exact_x
+
+    def x_values(self, index: int = 0) -> npt.NDArray:
+        """Return raw x values before applying the observation map."""
         value = self._x[index]
         return value if isinstance(value, np.ndarray) else self._data.mean(value)
+
+    def x_map(self, index: int = 0) -> npt.NDArray:
+        """Return the raw-x index used by each observation point."""
+        return self._x_map[index].copy()
+
+    def x(self, index: int = 0) -> npt.NDArray:
+        """Return x values expanded to one entry per observation point."""
+        return self.x_values(index)[self._x_map[index]]
 
     def y(self, index: int = 0) -> npt.NDArray:
         return self._data.mean(self._y_indices[index])
@@ -147,19 +234,12 @@ class XYData:
         include: Sequence[Tuple[float | None, float | None]] | None = None,
         exclude: Sequence[Tuple[float | None, float | None]] | None = None,
     ) -> npt.NDArray[np.bool_]:
-        """Return points selected by closed ranges of the x coordinates.
+        """Return points selected by closed coordinate intervals.
 
-        A point must satisfy every `include` range and must not satisfy every
-        `exclude` range. Use `(None, None)` for an unconstrained coordinate.
-
-        Args:
-            include: One `(low, high)` range per x coordinate. `None` leaves
-                an endpoint unbounded. Points outside any range are removed.
-            exclude: One `(low, high)` range per x coordinate. Matching points
-                are removed after applying `include`.
-
-        Returns:
-            A Boolean array with shape `(n_points,)`.
+        Every `include` or `exclude` entry is a `(low, high)` value interval
+        for one x coordinate. Both finite endpoints are included; use `None`
+        for an unbounded endpoint. When both are given, `exclude` is applied
+        after `include` and therefore removes overlapping points.
         """
 
         def range_mask(
@@ -169,7 +249,7 @@ class XYData:
                 raise ValueError(
                     f"{name} has {len(ranges)} ranges, expected {len(self._x)}"
                 )
-            mask = np.ones(self.x().shape, dtype=bool)
+            mask = np.ones(self.n_points, dtype=bool)
             for i, bounds in enumerate(ranges):
                 if len(bounds) != 2:
                     raise ValueError(f"{name} range {i} must contain two bounds")
@@ -182,14 +262,14 @@ class XYData:
                     raise ValueError(
                         f"{name} range {i} has lower bound above upper bound"
                     )
-                x = self.x(i)
+                values = self.x(i)
                 if low is not None:
-                    mask &= x >= low
+                    mask &= values >= low
                 if high is not None:
-                    mask &= x <= high
+                    mask &= values <= high
             return mask
 
-        mask = np.ones(self.x().shape, dtype=bool)
+        mask = np.ones(self.n_points, dtype=bool)
         if include is not None:
             mask &= range_mask(include, "include")
         if exclude is not None:
