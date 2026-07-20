@@ -59,4 +59,4 @@ class LaplaceFilteredT2:
                     out=self._filtered_data.cov(i, j),
                 )
         mean_f, cov_f = self._filtered_data.total_mean_cov(self._ranges)
-        return cov_quadratic_form(mean_f, cov_f)
+        return float(cov_quadratic_form(mean_f, cov_f))
