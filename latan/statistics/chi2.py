@@ -95,6 +95,8 @@ class Chi2:
         inex_x_val_ind: list[npt.NDArray[np.intp]] = []
         inex_x_obs_ind: list[npt.NDArray[np.intp]] = []
         for i in range(data.x_ndim):
+            if data.is_exact_x(i):
+                continue
             quantity = data.x_indices[i]
             assert quantity is not None
             active_map = data.x_map(i)[self._active_pts]
