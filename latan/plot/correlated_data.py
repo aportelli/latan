@@ -53,6 +53,7 @@ def correlations(
         fig, ax = plt.subplots()
     else:
         fig = ax.get_figure()
+    assert fig is not None
     image = ax.imshow(correlation, cmap="bwr", vmin=-1.0, vmax=1.0)
     fig.text(
         0.92,
