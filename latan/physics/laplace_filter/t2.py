@@ -9,11 +9,26 @@ from latan.statistics.correlation import cov_quadratic_form
 
 
 class LaplaceFilteredT2:
+    """Laplace-filtered T-squared function for correlated time series.
+
+    `ranges` selects a half-open index interval `(start, stop)` for each
+    quantity, following Python slicing: `start` is included and `stop` is
+    excluded.
+    """
+
     _data: CorrelatedData
     _ranges: List[Tuple[int, int]]
     _filtered_data: CorrelatedData
 
     def __init__(self, data: CorrelatedData, ranges: List[Tuple[int, int]]) -> None:
+        """Create a Laplace-filtered T-squared function.
+
+        Args:
+            data: Correlated time-series data.
+            ranges: One half-open index interval `(start, stop)` per
+                quantity. For example, `(6, 22)` selects indices 6 through
+                21.
+        """
         if len(ranges) != data.n_quantities:
             raise ValueError(
                 f"number of ranges and quantities mismatch "
@@ -30,6 +45,7 @@ class LaplaceFilteredT2:
 
     @property
     def ranges(self) -> Tuple[Tuple[int, int], ...]:
+        """Half-open index intervals used for each data quantity."""
         return tuple(self._ranges)
 
     def __call__(self, lamb: npt.NDArray) -> float:

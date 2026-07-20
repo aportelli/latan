@@ -140,6 +140,14 @@ def lfilter_spectrum(
     ncall: int = 5000,
     workers: int = 1,
 ) -> LaplaceFilterSpectrum:
+    """Fit a fixed number of Laplace-filter states.
+
+    Args:
+        data: Correlated data or aligned bootstrap samples.
+        ranges: One half-open index interval `(start, stop)` per quantity.
+            For example, `(6, 22)` selects indices 6 through 21.
+        n_state: Number of exponential states to fit.
+    """
     if isinstance(ranges, tuple):
         ranges = [ranges]
     if isinstance(data, CorrelatedData):
@@ -241,6 +249,18 @@ def lfilter_spectrum_test(
     init_lambda: float = 100.0,
     ncall: int = 5000,
 ) -> LaplaceFilterSpectrumTest:
+    """Test successive Laplace-filter state counts.
+
+    Args:
+        data: Correlated time-series data.
+        ranges: One half-open index interval `(start, stop)` per quantity.
+            For example, `(6, 22)` selects indices 6 through 21.
+        n_state: Largest state count tested.
+        alpha: Family-wise significance threshold for the state-count test.
+        verbose: Print the fitted spectra and test summary.
+        init_lambda: Initial regulator for an added state.
+        ncall: Maximum Minuit function evaluations per fit.
+    """
     msg = ""
     res = LaplaceFilterSpectrumTest()
     if verbose:

@@ -122,8 +122,9 @@ def fit(
         data: Pointwise x/y data and the fixed central covariance.
         model: Model relating x coordinates to y coordinates.
         p0: Initial physical model parameters.
-        include: Closed x-coordinate ranges defining retained points.
-        exclude: Closed x-coordinate ranges removed after `include`.
+        include: One closed `(low, high)` value interval per x coordinate.
+            Finite endpoints are included; `None` is unbounded.
+        exclude: Closed coordinate intervals removed after `include`.
         bootstrap: One bootstrap array per stochastic quantity in `data`.
         ncall: Maximum number of least-squares function evaluations.
         workers: Number of bootstrap worker processes.
