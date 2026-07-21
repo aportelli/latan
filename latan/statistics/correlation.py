@@ -5,8 +5,12 @@ import numpy.typing as npt
 from scipy import linalg
 
 
-def cdr(mat: npt.NDArray) -> float:
-    s = np.linalg.svd(mat, compute_uv=False)
+def cdr(mat: npt.NDArray, normalize: bool = True) -> float:
+    if normalize:
+        corr, _ = cov_to_corr(mat)
+    else:
+        corr = mat
+    s = np.linalg.svd(corr, compute_uv=False)
     return 10.0 * np.log10(s.max() / s.min())
 
 
