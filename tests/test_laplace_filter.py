@@ -145,7 +145,7 @@ class TestLaplaceFilter(unittest.TestCase):
             t2(lamb), self._reference_t2(mean_expected, cov_expected)
         )
 
-    def test_lfilter_spectrum_parallel(self) -> None:
+    def test_laplace_filter_spectrum_parallel(self) -> None:
         rng = np.random.default_rng(4)
         time = np.arange(8)
         central = np.exp(-0.4 * time) + 0.2 * np.exp(-1.0 * time)
