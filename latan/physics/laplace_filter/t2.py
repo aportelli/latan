@@ -3,7 +3,7 @@ from typing import List, Tuple
 import numpy as np
 import numpy.typing as npt
 
-from latan.physics.laplace_filter.filter import lfilter
+from latan.physics.laplace_filter.filter import lfilter_correlated_data
 from latan.statistics.correlated_data import CorrelatedData
 from latan.statistics.correlation import cov_quadratic_form
 
@@ -49,14 +49,6 @@ class LaplaceFilteredT2:
         return tuple(self._ranges)
 
     def __call__(self, lamb: npt.NDArray) -> float:
-        for i in range(self._data.n_quantities):
-            lfilter(self._data.mean(i), lamb, out=self._filtered_data.mean(i))
-            for j in range(i, self._data.n_quantities):
-                lfilter(
-                    self._data.cov(i, j),
-                    lamb,
-                    dim=(0, 1),
-                    out=self._filtered_data.cov(i, j),
-                )
+        lfilter_correlated_data(self._data, lamb, out=self._filtered_data)
         mean_f, cov_f = self._filtered_data.total_mean_cov(self._ranges)
         return float(cov_quadratic_form(mean_f, cov_f))

@@ -44,6 +44,42 @@ class TestLaplaceFilter(unittest.TestCase):
         np.testing.assert_allclose(result, expected)
         np.testing.assert_allclose(latan.lfilter(data, [], dims), data)
 
+    def test_laplace_filter_correlated_data(self) -> None:
+        rng = np.random.default_rng(2)
+        means = [rng.normal(size=4), rng.normal(size=3)]
+        matrix = rng.normal(size=(7, 7))
+        cov = matrix @ matrix.T + np.eye(7)
+        data = CorrelatedData(
+            means,
+            [[cov[:4, :4], cov[:4, 4:]], [cov[4:, 4:]]],
+        )
+        lamb = np.array([0.4, 0.7])
+
+        filtered = latan.lfilter_correlated_data(data, lamb)
+        out = CorrelatedData(
+            [np.empty_like(data.mean(i)) for i in range(data.n_quantities)],
+            [
+                [
+                    np.zeros_like(data.cov(i, j))
+                    if i == j
+                    else np.empty_like(data.cov(i, j))
+                    for j in range(i, data.n_quantities)
+                ]
+                for i in range(data.n_quantities)
+            ],
+        )
+        self.assertIs(latan.lfilter_correlated_data(data, lamb, out=out), out)
+
+        for i in range(data.n_quantities):
+            np.testing.assert_allclose(
+                filtered.mean(i), latan.lfilter(data.mean(i), lamb)
+            )
+            np.testing.assert_allclose(out.mean(i), filtered.mean(i))
+            for j in range(i, data.n_quantities):
+                expected = latan.lfilter(data.cov(i, j), lamb, dim=(0, 1))
+                np.testing.assert_allclose(filtered.cov(i, j), expected)
+                np.testing.assert_allclose(out.cov(i, j), expected)
+
     def test_laplace_filter_t2_single(self) -> None:
         rng = np.random.default_rng(2)
         mean = rng.normal(size=5)

@@ -4,6 +4,8 @@ import numpy as np
 import numpy.typing as npt
 from numba import njit
 
+from latan.statistics.correlated_data import CorrelatedData
+
 
 @njit(cache=True)
 def _lfilter_kernel(
@@ -77,6 +79,39 @@ def lfilter(
                 _lfilter_kernel(src, la**2, d, dest)
                 src = dest
                 dest = buf if dest is out else out
+    return out
+
+
+def lfilter_correlated_data(
+    data: CorrelatedData,
+    lamb: float | Sequence[float] | npt.NDArray,
+    out: CorrelatedData | None = None,
+) -> CorrelatedData:
+    """Apply Laplace filters to correlated means and covariance blocks.
+
+    Means are filtered along their sole axis. Covariance blocks are filtered
+    along both axes. `out`, when supplied, must have the same number of
+    quantities and compatible mean and covariance-block shapes as `data`.
+    """
+    if out is None:
+        means = [np.empty_like(data.mean(i)) for i in range(data.n_quantities)]
+        covs = [
+            [
+                np.zeros_like(data.cov(i, j))
+                if i == j
+                else np.empty_like(data.cov(i, j))
+                for j in range(i, data.n_quantities)
+            ]
+            for i in range(data.n_quantities)
+        ]
+        out = CorrelatedData(means, covs)
+    elif out.n_quantities != data.n_quantities:
+        raise ValueError("out and data have a different number of quantities")
+
+    for i in range(data.n_quantities):
+        lfilter(data.mean(i), lamb, out=out.mean(i))
+        for j in range(i, data.n_quantities):
+            lfilter(data.cov(i, j), lamb, dim=(0, 1), out=out.cov(i, j))
     return out
 
 
