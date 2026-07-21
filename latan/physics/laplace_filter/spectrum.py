@@ -3,7 +3,7 @@ import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from functools import partial
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, overload
 
 import numpy as np
 import numpy.typing as npt
@@ -17,9 +17,9 @@ from latan.statistics.correlated_data import CorrelatedData, make_correlated_dat
 
 
 @dataclass
-class LaplaceFilterSpectrum:
-    energies: npt.NDArray | BootstrapArray
-    lambdas: npt.NDArray | BootstrapArray
+class LaplaceFilterSpectrum[T: npt.NDArray]:
+    energies: T
+    lambdas: T
     t2: float
     p_value: float
     dof: int
@@ -27,7 +27,7 @@ class LaplaceFilterSpectrum:
 
 @dataclass
 class LaplaceFilterSpectrumTest:
-    spectra: List[LaplaceFilterSpectrum] = field(default_factory=list)
+    spectra: List[LaplaceFilterSpectrum[npt.NDArray]] = field(default_factory=list)
     dt2: npt.NDArray = field(default_factory=lambda: np.empty(0))
     pbar_val: npt.NDArray = field(default_factory=lambda: np.empty(0))
     sig_states: int = -1
@@ -42,7 +42,7 @@ def _lfilter_spectrum(
     initial_lambdas: Optional[npt.NDArray] = None,
     init_lambda: float = 100.0,
     ncall: int = 5000,
-) -> LaplaceFilterSpectrum:
+) -> LaplaceFilterSpectrum[npt.NDArray]:
     if n_state < 1:
         raise ValueError("n_state must be positive")
     if len(ranges) != data.n_quantities:
@@ -129,6 +129,34 @@ def _spectrum_batch(
     return lambdas, energies
 
 
+@overload
+def lfilter_spectrum(
+    data: CorrelatedData,
+    ranges: List[Tuple[int, int]] | Tuple[int, int],
+    n_state: int,
+    *,
+    m_guess: Optional[float] = None,
+    initial_lambdas: Optional[npt.NDArray] = None,
+    init_lambda: float = 100.0,
+    ncall: int = 5000,
+    workers: int = 1,
+) -> LaplaceFilterSpectrum[npt.NDArray]: ...
+
+
+@overload
+def lfilter_spectrum(
+    data: List[BootstrapArray] | BootstrapArray,
+    ranges: List[Tuple[int, int]] | Tuple[int, int],
+    n_state: int,
+    *,
+    m_guess: Optional[float] = None,
+    initial_lambdas: Optional[npt.NDArray] = None,
+    init_lambda: float = 100.0,
+    ncall: int = 5000,
+    workers: int = 1,
+) -> LaplaceFilterSpectrum[BootstrapArray]: ...
+
+
 def lfilter_spectrum(
     data: CorrelatedData | List[BootstrapArray] | BootstrapArray,
     ranges: List[Tuple[int, int]] | Tuple[int, int],
@@ -139,7 +167,7 @@ def lfilter_spectrum(
     init_lambda: float = 100.0,
     ncall: int = 5000,
     workers: int = 1,
-) -> LaplaceFilterSpectrum:
+) -> LaplaceFilterSpectrum[npt.NDArray] | LaplaceFilterSpectrum[BootstrapArray]:
     """Fit a fixed number of Laplace-filter states.
 
     Args:

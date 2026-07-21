@@ -2,7 +2,7 @@ import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from functools import partial
-from typing import Sequence
+from typing import Sequence, cast, overload
 
 import numpy as np
 import numpy.typing as npt
@@ -16,7 +16,7 @@ from latan.statistics.xy_data import XYData
 
 
 @dataclass
-class FitResult:
+class FitResult[T: npt.NDArray]:
     """Result of a correlated fit.
 
     `parameters` contains physical model parameters followed by latent-x
@@ -24,21 +24,21 @@ class FitResult:
     with the central result at index 0.
     """
 
-    parameters: npt.NDArray | BootstrapArray
+    parameters: T
     chi2: float
     dof: int
     p_value: float
     n_model_parameters: int
 
     @property
-    def model_parameters(self) -> npt.NDArray | BootstrapArray:
+    def model_parameters(self) -> T:
         """Fitted physical model parameters."""
-        return self.parameters[..., : self.n_model_parameters]
+        return cast(T, self.parameters[..., : self.n_model_parameters])
 
     @property
-    def latent_parameters(self) -> npt.NDArray | BootstrapArray:
+    def latent_parameters(self) -> T:
         """Fitted latent-x parameters."""
-        return self.parameters[..., self.n_model_parameters :]
+        return cast(T, self.parameters[..., self.n_model_parameters :])
 
 
 # chi2 minimization helper
@@ -101,6 +101,34 @@ def _bootstrap_samples(
     return samples
 
 
+@overload
+def fit(
+    data: XYData,
+    model: Model,
+    p0: npt.NDArray,
+    *,
+    include: PointRanges | None = None,
+    exclude: PointRanges | None = None,
+    bootstrap: None = None,
+    ncall: int = 5000,
+    workers: int = 1,
+) -> FitResult[npt.NDArray]: ...
+
+
+@overload
+def fit(
+    data: XYData,
+    model: Model,
+    p0: npt.NDArray,
+    *,
+    include: PointRanges | None = None,
+    exclude: PointRanges | None = None,
+    bootstrap: BootstrapArray | Sequence[BootstrapArray],
+    ncall: int = 5000,
+    workers: int = 1,
+) -> FitResult[BootstrapArray]: ...
+
+
 def fit(
     data: XYData,
     model: Model,
@@ -111,7 +139,7 @@ def fit(
     bootstrap: BootstrapArray | Sequence[BootstrapArray] | None = None,
     ncall: int = 5000,
     workers: int = 1,
-) -> FitResult:
+) -> FitResult[npt.NDArray] | FitResult[BootstrapArray]:
     """Fit a model to correlated x/y data.
 
     A cheap uncorrelated fit with observed x values fixed preconditions the
@@ -151,7 +179,7 @@ def fit(
     # central value fit
     central_parameters = _minimize(chi2, chi2.full_parameters(preconditioned), ncall)
     central_chi2 = chi2(central_parameters)
-    result = FitResult(
+    central_result = FitResult(
         parameters=central_parameters,
         chi2=central_chi2,
         dof=chi2.dof,
@@ -161,7 +189,7 @@ def fit(
 
     # if fit is not bootstrapped we are done
     if bootstrap is None:
-        return result
+        return central_result
 
     # if bootstrapped do potentially parallel loop on bootstrap samples
     samples = _bootstrap_samples(data, bootstrap)
@@ -202,5 +230,10 @@ def fit(
                 batches, executor.map(fit_batch, batches)
             ):
                 parameters[indices + 1] = batch_parameters
-    result.parameters = BootstrapArray(parameters)
-    return result
+    return FitResult(
+        parameters=BootstrapArray(parameters),
+        chi2=central_result.chi2,
+        dof=central_result.dof,
+        p_value=central_result.p_value,
+        n_model_parameters=central_result.n_model_parameters,
+    )

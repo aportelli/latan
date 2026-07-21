@@ -1,9 +1,10 @@
-from typing import Sequence
+from typing import Sequence, overload
 
 import numpy as np
 import numpy.typing as npt
 from numba import njit
 
+from latan.statistics.bootstrap import BootstrapArray
 from latan.statistics.correlated_data import CorrelatedData
 
 
@@ -38,10 +39,28 @@ def _lfilter_kernel(
             )
 
 
+@overload
+def lfilter(
+    data: BootstrapArray,
+    lamb: float | Sequence[float] | npt.NDArray,
+    dim: int | Sequence[int] = -1,
+    out: BootstrapArray | None = None,
+) -> BootstrapArray: ...
+
+
+@overload
 def lfilter(
     data: npt.NDArray,
     lamb: float | Sequence[float] | npt.NDArray,
-    dim: int | Sequence[int] = 0,
+    dim: int | Sequence[int] = -1,
+    out: npt.NDArray | None = None,
+) -> npt.NDArray: ...
+
+
+def lfilter(
+    data: npt.NDArray,
+    lamb: float | Sequence[float] | npt.NDArray,
+    dim: int | Sequence[int] = -1,
     out: npt.NDArray | None = None,
 ) -> npt.NDArray:
     """Apply one or more periodic Laplace filters to an array.
@@ -57,6 +76,10 @@ def lfilter(
     then ``a`` on axis 1, then ``b`` on axis 0, and finally ``b`` on axis 1.
     An empty regulator sequence copies `data` unchanged.
 
+    The default axis is the last axis. A `BootstrapArray` input remains a
+    `BootstrapArray`; filtering its sample axis 0 is not allowed. If `out`
+    is supplied for bootstrap data, it must also be a `BootstrapArray`.
+
     Args:
         data: Array to filter.
         lamb: One regulator or a sequence of regulators.
@@ -69,13 +92,6 @@ def lfilter(
     """
     if data.ndim == 0:
         raise ValueError("data must have at least one dimension")
-    data = np.ascontiguousarray(data)
-    if out is None:
-        out = np.empty_like(data, dtype=data.dtype)
-    elif out.shape != data.shape or not out.flags.c_contiguous:
-        raise ValueError("out must be C-contiguous and have data's shape")
-    if np.shares_memory(data, out):
-        raise ValueError("out must not overlap data")
     if isinstance(lamb, np.ndarray) and lamb.ndim == 0:
         lambs = [lamb.item()]
     elif not isinstance(lamb, (Sequence, np.ndarray)):
@@ -87,6 +103,19 @@ def lfilter(
     else:
         dims = dim
     n_ops = len(lambs) * len(dims)
+    is_bootstrap = isinstance(data, BootstrapArray)
+    if is_bootstrap and any(dim % data.ndim == 0 for dim in dims):
+        raise ValueError("cannot filter the BootstrapArray sample axis")
+    if is_bootstrap and out is not None and not isinstance(out, BootstrapArray):
+        raise TypeError("BootstrapArray input requires a BootstrapArray out")
+
+    data = np.ascontiguousarray(data)
+    if out is None:
+        out = np.empty_like(data, dtype=data.dtype)
+    elif out.shape != data.shape or not out.flags.c_contiguous:
+        raise ValueError("out must be C-contiguous and have data's shape")
+    if np.shares_memory(data, out):
+        raise ValueError("out must not overlap data")
     if n_ops == 0:
         out[...] = data
     elif n_ops == 1:
@@ -102,6 +131,8 @@ def lfilter(
                 _lfilter_kernel(src, la**2, d, dest)
                 src = dest
                 dest = buf if dest is out else out
+    if is_bootstrap and not isinstance(out, BootstrapArray):
+        return BootstrapArray(out)
     return out
 
 
@@ -138,12 +169,57 @@ def lfilter_correlated_data(
     return out
 
 
+@overload
+def lfilter_tilde(e: BootstrapArray) -> BootstrapArray: ...
+
+
+@overload
+def lfilter_tilde(e: npt.NDArray) -> npt.NDArray: ...
+
+
+@overload
+def lfilter_tilde(e: npt.ArrayLike) -> np.floating | npt.NDArray: ...
+
+
 def lfilter_tilde(e: npt.ArrayLike) -> np.floating | npt.NDArray:
     return np.sqrt(2.0 * (np.cosh(e) - 1.0))
 
 
+@overload
+def lfilter_tilde_inv(lamb: BootstrapArray) -> BootstrapArray: ...
+
+
+@overload
+def lfilter_tilde_inv(lamb: npt.NDArray) -> npt.NDArray: ...
+
+
+@overload
+def lfilter_tilde_inv(lamb: npt.ArrayLike) -> np.floating | npt.NDArray: ...
+
+
 def lfilter_tilde_inv(lamb: npt.ArrayLike) -> np.floating | npt.NDArray:
     return 2.0 * np.arcsinh(lamb / 2.0)
+
+
+@overload
+def lfilter_factor(
+    lamb: float | Sequence[float] | npt.NDArray,
+    e: BootstrapArray,
+) -> BootstrapArray: ...
+
+
+@overload
+def lfilter_factor(
+    lamb: float | Sequence[float] | npt.NDArray,
+    e: npt.NDArray,
+) -> npt.NDArray: ...
+
+
+@overload
+def lfilter_factor(
+    lamb: float | Sequence[float] | npt.NDArray,
+    e: float | Sequence[float] | npt.NDArray,
+) -> np.floating | npt.NDArray: ...
 
 
 def lfilter_factor(
@@ -158,4 +234,7 @@ def lfilter_factor(
         lambs = lamb
     energies = np.asarray(e)
     lambs = np.asarray(lambs).reshape((-1,) + (1,) * energies.ndim)
-    return np.prod(lambs**2 - lfilter_tilde(energies) ** 2, axis=0)
+    factor = np.prod(lambs**2 - lfilter_tilde(energies) ** 2, axis=0)
+    if isinstance(e, BootstrapArray):
+        return BootstrapArray(factor)
+    return factor

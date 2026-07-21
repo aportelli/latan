@@ -43,6 +43,29 @@ class TestLaplaceFilter(unittest.TestCase):
         np.testing.assert_allclose(result, expected)
         np.testing.assert_allclose(latan.lfilter(data, [], dims), data)
 
+    def test_laplace_filter_bootstrap(self) -> None:
+        rng = np.random.default_rng(2)
+        bootstrap = latan.BootstrapArray(rng.normal(size=(17, 8)))
+        lamb = np.array([0.3, 0.6])
+        filtered = latan.lfilter(bootstrap, lamb, dim=-1)
+        self.assertIsInstance(filtered, latan.BootstrapArray)
+        np.testing.assert_allclose(
+            filtered,
+            latan.lfilter(np.asarray(bootstrap), lamb, dim=-1),
+        )
+        np.testing.assert_allclose(
+            latan.make_correlated_data(filtered).mean(), filtered.central
+        )
+        out = latan.BootstrapArray(np.empty_like(bootstrap))
+        self.assertIs(latan.lfilter(bootstrap, lamb, dim=-1, out=out), out)
+        np.testing.assert_allclose(out, filtered)
+        with self.assertRaises(TypeError):
+            latan.lfilter(
+                bootstrap, lamb, dim=-1, out=np.empty_like(np.asarray(bootstrap))
+            )
+        with self.assertRaises(ValueError):
+            latan.lfilter(bootstrap, lamb, dim=0)
+
     def test_laplace_filter_factor(self) -> None:
         time = np.arange(16.0)
         energies = np.array([[0.3, 0.5, 0.7], [0.9, 1.1, 1.3]])
@@ -53,6 +76,16 @@ class TestLaplaceFilter(unittest.TestCase):
         assert isinstance(factor, np.ndarray)
         expected = factor[..., None] * data
         np.testing.assert_allclose(filtered[..., 2:-2], expected[..., 2:-2])
+        bootstrap_energies = latan.BootstrapArray(energies)
+        self.assertIsInstance(
+            latan.lfilter_tilde(bootstrap_energies), latan.BootstrapArray
+        )
+        self.assertIsInstance(
+            latan.lfilter_tilde_inv(bootstrap_energies), latan.BootstrapArray
+        )
+        bootstrap_factor = latan.lfilter_factor(lambdas, bootstrap_energies)
+        self.assertIsInstance(bootstrap_factor, latan.BootstrapArray)
+        np.testing.assert_allclose(bootstrap_factor, factor)
 
     def test_laplace_filter_correlated_data(self) -> None:
         rng = np.random.default_rng(2)
