@@ -44,6 +44,29 @@ def lfilter(
     dim: int | Sequence[int] = 0,
     out: npt.NDArray | None = None,
 ) -> npt.NDArray:
+    """Apply one or more periodic Laplace filters to an array.
+
+    One filter with regulator ``lamb`` on axis ``dim`` maps each element
+    ``x[t]`` to ``(2 + lamb**2) * x[t] - x[t - 1] - x[t + 1]``. The two
+    neighbours wrap around at the endpoints of the selected axis.
+
+    `lamb` may be one scalar or a sequence of regulators. `dim` may be one
+    axis or a sequence of axes. With multiple regulators and axes, filters
+    are applied in regulator order and, for each regulator, in axis order.
+    For example, ``lfilter(data, [a, b], [0, 1])`` applies ``a`` on axis 0,
+    then ``a`` on axis 1, then ``b`` on axis 0, and finally ``b`` on axis 1.
+    An empty regulator sequence copies `data` unchanged.
+
+    Args:
+        data: Array to filter.
+        lamb: One regulator or a sequence of regulators.
+        dim: One axis or an ordered sequence of axes.
+        out: Optional C-contiguous array with the same shape as `data`. It
+            must not overlap `data`.
+
+    Returns:
+        The filtered array, or `out` when it is supplied.
+    """
     if data.ndim == 0:
         raise ValueError("data must have at least one dimension")
     data = np.ascontiguousarray(data)
@@ -115,9 +138,24 @@ def lfilter_correlated_data(
     return out
 
 
-def lfilter_tilde(e):
+def lfilter_tilde(e: npt.ArrayLike) -> np.floating | npt.NDArray:
     return np.sqrt(2.0 * (np.cosh(e) - 1.0))
 
 
-def lfilter_tilde_inv(lamb):
+def lfilter_tilde_inv(lamb: npt.ArrayLike) -> np.floating | npt.NDArray:
     return 2.0 * np.arcsinh(lamb / 2.0)
+
+
+def lfilter_factor(
+    lamb: float | Sequence[float] | npt.NDArray,
+    e: float | Sequence[float] | npt.NDArray,
+) -> np.floating | npt.NDArray:
+    if isinstance(lamb, np.ndarray) and lamb.ndim == 0:
+        lambs = [lamb.item()]
+    elif not isinstance(lamb, (Sequence, np.ndarray)):
+        lambs = [lamb]
+    else:
+        lambs = lamb
+    energies = np.asarray(e)
+    lambs = np.asarray(lambs).reshape((-1,) + (1,) * energies.ndim)
+    return np.prod(lambs**2 - lfilter_tilde(energies) ** 2, axis=0)

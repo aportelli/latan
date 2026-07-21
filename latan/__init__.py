@@ -1,8 +1,9 @@
 __private__ = ["datasets", "plot"]
 from latan.physics import (LaplaceFilterSpectrum, LaplaceFilterSpectrumTest,
                            LaplaceFilteredT2, lfilter, lfilter_correlated_data,
-                           lfilter_spectrum, lfilter_spectrum_test,
-                           lfilter_tilde, lfilter_tilde_inv,)
+                           lfilter_factor, lfilter_spectrum,
+                           lfilter_spectrum_test, lfilter_tilde,
+                           lfilter_tilde_inv,)
 from latan.statistics import (Bootstrap, BootstrapArray, Chi2, CorrelatedData,
                               FitResult, Model, ModelFunction,
                               NonparametricBootstrap,
@@ -19,6 +20,6 @@ __all__ = ['Bootstrap', 'BootstrapArray', 'Chi2', 'CorrelatedData',
            'PointRanges', 'XYData', 'cdr', 'corr_to_cov', 'cov_factor',
            'cov_independent_residuals', 'cov_inverse_multiply',
            'cov_quadratic_form', 'cov_to_corr', 'fit', 'gaussian_sample',
-           'lfilter', 'lfilter_correlated_data', 'lfilter_spectrum',
-           'lfilter_spectrum_test', 'lfilter_tilde', 'lfilter_tilde_inv',
-           'make_correlated_data']
+           'lfilter', 'lfilter_correlated_data', 'lfilter_factor',
+           'lfilter_spectrum', 'lfilter_spectrum_test', 'lfilter_tilde',
+           'lfilter_tilde_inv', 'make_correlated_data']

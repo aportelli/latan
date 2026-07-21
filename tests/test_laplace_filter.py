@@ -3,7 +3,6 @@ import unittest
 import numpy as np
 
 import latan
-from latan.statistics.correlated_data import CorrelatedData
 
 
 class TestLaplaceFilter(unittest.TestCase):
@@ -44,19 +43,30 @@ class TestLaplaceFilter(unittest.TestCase):
         np.testing.assert_allclose(result, expected)
         np.testing.assert_allclose(latan.lfilter(data, [], dims), data)
 
+    def test_laplace_filter_factor(self) -> None:
+        time = np.arange(16.0)
+        energies = np.array([[0.3, 0.5, 0.7], [0.9, 1.1, 1.3]])
+        lambdas = np.array([0.2, 0.6])
+        data = np.exp(-energies[..., None] * time)
+        filtered = latan.lfilter(data, lambdas, dim=-1)
+        factor = latan.lfilter_factor(lambdas, energies)
+        assert isinstance(factor, np.ndarray)
+        expected = factor[..., None] * data
+        np.testing.assert_allclose(filtered[..., 2:-2], expected[..., 2:-2])
+
     def test_laplace_filter_correlated_data(self) -> None:
         rng = np.random.default_rng(2)
         means = [rng.normal(size=4), rng.normal(size=3)]
         matrix = rng.normal(size=(7, 7))
         cov = matrix @ matrix.T + np.eye(7)
-        data = CorrelatedData(
+        data = latan.CorrelatedData(
             means,
             [[cov[:4, :4], cov[:4, 4:]], [cov[4:, 4:]]],
         )
         lamb = np.array([0.4, 0.7])
 
         filtered = latan.lfilter_correlated_data(data, lamb)
-        out = CorrelatedData(
+        out = latan.CorrelatedData(
             [np.empty_like(data.mean(i)) for i in range(data.n_quantities)],
             [
                 [
@@ -86,7 +96,7 @@ class TestLaplaceFilter(unittest.TestCase):
         matrix = rng.normal(size=(5, 5))
         cov = matrix @ matrix.T + np.eye(5)
         lamb = np.array([0.4, 0.7])
-        data = CorrelatedData(mean, cov)
+        data = latan.CorrelatedData(mean, cov)
         t2 = latan.LaplaceFilteredT2(data, [(1, 5)])
 
         mean_filtered = latan.lfilter(mean, lamb)[1:5]
@@ -106,7 +116,7 @@ class TestLaplaceFilter(unittest.TestCase):
         cov_aa = cov_total[:4, :4]
         cov_ab = cov_total[:4, 4:]
         cov_bb = cov_total[4:, 4:]
-        data = CorrelatedData([mean_a, mean_b], [[cov_aa, cov_ab], [cov_bb]])
+        data = latan.CorrelatedData([mean_a, mean_b], [[cov_aa, cov_ab], [cov_bb]])
         ranges = [(1, 4), (0, 2)]
         lamb = np.array([0.3, 0.6])
         t2 = latan.LaplaceFilteredT2(data, ranges)
