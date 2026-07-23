@@ -10,24 +10,40 @@ import numpy.typing as npt
 from iminuit import Minuit
 from scipy import stats
 
-from latan.physics.laplace_filter.filter import lfilter_tilde_inv
+from latan.physics.laplace_filter.filter import (
+    lfilter,
+    lfilter_correlated_data,
+    lfilter_factor,
+    lfilter_tilde_inv,
+)
 from latan.physics.laplace_filter.t2 import LaplaceFilteredT2
 from latan.statistics.bootstrap import BootstrapArray
 from latan.statistics.correlated_data import CorrelatedData, make_correlated_data
+from latan.statistics.correlation import cdr, cov_inverse_multiply, cov_quadratic_form
 
 
 @dataclass
-class LaplaceFilterSpectrum[T: npt.NDArray]:
+class LaplaceFilterEnergies[T: npt.NDArray]:
     energies: T
     lambdas: T
     t2: float
     p_value: float
     dof: int
+    cdr: float
+
+
+@dataclass
+class LaplaceFilterAmplitudes[T: npt.NDArray]:
+    amplitudes: T
+    chi2: float
+    p_value: float
+    dof: int
+    cdr: float
 
 
 @dataclass
 class LaplaceFilterSpectrumTest:
-    spectra: List[LaplaceFilterSpectrum[npt.NDArray]] = field(default_factory=list)
+    spectra: List[LaplaceFilterEnergies[npt.NDArray]] = field(default_factory=list)
     dt2: npt.NDArray = field(default_factory=lambda: np.empty(0))
     pbar_val: npt.NDArray = field(default_factory=lambda: np.empty(0))
     sig_states: int = -1
@@ -42,7 +58,7 @@ def _lfilter_spectrum(
     initial_lambdas: Optional[npt.NDArray] = None,
     init_lambda: float = 100.0,
     ncall: int = 5000,
-) -> LaplaceFilterSpectrum[npt.NDArray]:
+) -> LaplaceFilterEnergies[npt.NDArray]:
     if n_state < 1:
         raise ValueError("n_state must be positive")
     if len(ranges) != data.n_quantities:
@@ -54,23 +70,27 @@ def _lfilter_spectrum(
     if dof <= 0:
         raise ValueError(f"non-positive degrees of freedom ({dof})")
 
-    if m_guess is None:
-        mean = data.mean()
-        t_guess = mean.shape[0] // 4
-        m_guess = math.log(mean[t_guess - 1] / mean[t_guess])
-
     t2_func = LaplaceFilteredT2(data, ranges)
 
+    # cost function using iMinuit call convention
     def cost(*lambdas):
         return t2_func(np.asarray(lambdas, dtype=float))
 
     names = [f"lambda_{i}" for i in range(n_state)]
+
+    # if no initial lambda is provided, make an uncorrelated T2 minimisation
+    # to determine guess (only on central value for bootstrap)
     if initial_lambdas is None:
         t2_uncorr_func = LaplaceFilteredT2(data.uncorrelated(), ranges)
 
         def cost_uncorr(*lambdas):
             return t2_uncorr_func(np.asarray(lambdas, dtype=float))
 
+        # if no ground state guess is provided, use log effective mass at nt/4
+        if m_guess is None:
+            mean = data.mean()
+            t_guess = mean.shape[0] // 4
+            m_guess = math.log(mean[t_guess - 1] / mean[t_guess])
         start = np.array([m_guess, *([init_lambda] * (n_state - 1))])
         m_uncorr = Minuit(cost_uncorr, *start, name=names)
         m_uncorr.limits = (0, None)
@@ -92,12 +112,15 @@ def _lfilter_spectrum(
         print("warning: invalid minimum")
     lambdas = np.asarray(sorted(minimum.values))
     t2 = t2_func(lambdas)
-    spectrum = LaplaceFilterSpectrum(
+    filtered_data = lfilter_correlated_data(data, lambdas)
+    _, cov = filtered_data.total_mean_cov(ranges)
+    spectrum = LaplaceFilterEnergies(
         energies=lfilter_tilde_inv(lambdas),
         lambdas=lambdas,
         t2=t2,
         p_value=stats.chi2.sf(t2, dof).item(),
         dof=dof,
+        cdr=cdr(cov),
     )
     return spectrum
 
@@ -140,7 +163,7 @@ def lfilter_spectrum(
     init_lambda: float = 100.0,
     ncall: int = 5000,
     workers: int = 1,
-) -> LaplaceFilterSpectrum[npt.NDArray]: ...
+) -> LaplaceFilterEnergies[npt.NDArray]: ...
 
 
 @overload
@@ -154,7 +177,159 @@ def lfilter_spectrum(
     init_lambda: float = 100.0,
     ncall: int = 5000,
     workers: int = 1,
-) -> LaplaceFilterSpectrum[BootstrapArray]: ...
+) -> LaplaceFilterEnergies[BootstrapArray]: ...
+
+
+@overload
+def lfilter_amplitudes(
+    data: CorrelatedData,
+    ranges: List[Tuple[int, int]] | Tuple[int, int],
+    lambdas: npt.NDArray,
+    *,
+    amplitude_lambda: Optional[float] = None,
+) -> LaplaceFilterAmplitudes[npt.NDArray]: ...
+
+
+@overload
+def lfilter_amplitudes(
+    data: List[BootstrapArray] | BootstrapArray,
+    ranges: List[Tuple[int, int]] | Tuple[int, int],
+    lambdas: npt.NDArray | BootstrapArray,
+    *,
+    amplitude_lambda: Optional[float] = None,
+) -> LaplaceFilterAmplitudes[BootstrapArray]: ...
+
+
+def lfilter_amplitudes(
+    data: CorrelatedData | List[BootstrapArray] | BootstrapArray,
+    ranges: List[Tuple[int, int]] | Tuple[int, int],
+    lambdas: npt.NDArray | BootstrapArray,
+    *,
+    amplitude_lambda: Optional[float] = None,
+) -> LaplaceFilterAmplitudes[npt.NDArray] | LaplaceFilterAmplitudes[BootstrapArray]:
+    """Determine amplitudes from spectrum through a linear regression.
+
+    Each quantity has one amplitude per supplied regulator. Bootstrap data
+    are fitted in one batched linear solve with the central covariance fixed.
+    An optional Laplace filter regulator can be provided to improve the conditioning
+    of the correlation matrix. If provided, the resulting amplitudes are corrected to
+    fit the unfiltered data.
+    """
+    if isinstance(ranges, tuple):
+        ranges = [ranges]
+    if isinstance(data, CorrelatedData):
+        if isinstance(lambdas, BootstrapArray):
+            raise TypeError("CorrelatedData requires non-bootstrap lambdas")
+        if amplitude_lambda is not None:
+            cdata = lfilter_correlated_data(data, amplitude_lambda)
+        else:
+            cdata = data
+        y = None
+        n_bootstrap = None
+    else:
+        if isinstance(data, BootstrapArray):
+            data = [data]
+        if not isinstance(data, list) or not data:
+            raise TypeError("data must be CorrelatedData or a list of BootstrapArray")
+        if not all(isinstance(item, BootstrapArray) for item in data):
+            raise TypeError("data must be CorrelatedData or a list of BootstrapArray")
+        if len(ranges) != len(data):
+            raise ValueError("number of ranges and bootstrap quantities mismatch")
+        if amplitude_lambda is not None:
+            data_f = [lfilter(b, amplitude_lambda) for b in data]
+        else:
+            data_f = data
+        cdata = make_correlated_data(data_f)
+        n_bootstrap = data_f[0].shape[0]
+        if any(item.shape[0] != n_bootstrap for item in data_f):
+            raise ValueError("bootstrap quantities have different sample counts")
+        y = np.concatenate(
+            [
+                np.asarray(item)[..., start:stop]
+                for item, (start, stop) in zip(data_f, ranges)
+            ],
+            axis=-1,
+        )
+
+    mean, cov = cdata.total_mean_cov(ranges)
+    if n_bootstrap is None:
+        if lambdas.ndim != 1:
+            raise ValueError("lambdas must have shape (n_states,)")
+    elif isinstance(lambdas, BootstrapArray):
+        if lambdas.ndim != 2 or lambdas.shape[0] != n_bootstrap:
+            raise ValueError("bootstrap lambdas must align with bootstrap data")
+    elif lambdas.ndim != 1:
+        raise ValueError("fixed lambdas must have shape (n_states,)")
+
+    energies = np.asarray(lfilter_tilde_inv(lambdas))
+    n_states = energies.shape[-1]
+    n_quantities = cdata.n_quantities
+    n_amplitudes = n_quantities * n_states
+    n_points = mean.size
+    dof = n_points - n_amplitudes
+    if dof <= 0:
+        raise ValueError(f"non-positive degrees of freedom ({dof})")
+
+    # build Laplace transform matrix
+    #
+    # L_ti = exp(-E_i*t)
+    #
+    # if several quantities are present, L is extended as a block-diagonal matrix for
+    # every time range.
+    lmat = np.zeros((*energies.shape[:-1], n_points, n_amplitudes))
+    offset = 0
+    for quantity, (start, stop) in enumerate(ranges):
+        time = np.arange(start, stop)
+        block = np.exp(-energies[..., :, None] * time)
+        size = time.size
+        lmat[
+            ...,
+            offset : offset + size,
+            quantity * n_states : (quantity + 1) * n_states,
+        ] = np.swapaxes(block, -1, -2)
+        offset += size
+
+    # linear regression for the (potentially filtered) amplitudes
+    #
+    # B = (L^T * V^-1 * L)^-1 * (L^T * V^-1 * y)
+    #
+    # where V is the covariance matrix and y the data
+    if y is None:
+        y = mean
+    lmat_t = np.swapaxes(lmat, -1, -2)
+    vinv_lmat = cov_inverse_multiply(lmat_t, cov)  # transposed for columns as batch
+    lmat_vinv_lmat = lmat_t @ np.swapaxes(vinv_lmat, -1, -2)
+    vinv_y = cov_inverse_multiply(y, cov)
+    rhs = lmat_t @ vinv_y[..., None]
+    filtered_amplitudes = np.linalg.solve(lmat_vinv_lmat, rhs).squeeze(-1)
+
+    central_lmat = lmat[0] if lmat.ndim == 3 else lmat
+    central_y = y[0] if y.ndim == 2 else y
+    central_amplitudes = (
+        filtered_amplitudes[0] if filtered_amplitudes.ndim == 2 else filtered_amplitudes
+    )
+    residual = central_y - central_lmat @ central_amplitudes
+    chi2 = float(cov_quadratic_form(residual, cov))
+
+    # package final result, if the optional amplitude_lambda regulator was provided,
+    # amplitudes are corrected by a factor 1 / (amplitude_lambda^2 - Etilde_i^2)
+    # with Etilde_i^2 = 2.0 * [cosh(E_i) - 1.0] (cf. lfilter_tilde)
+    shape = (*filtered_amplitudes.shape[:-1], n_quantities, n_states)
+    amplitudes = filtered_amplitudes.reshape(shape)
+    if amplitude_lambda is not None:
+        factor = np.asarray(lfilter_factor(amplitude_lambda, energies))
+        amplitudes /= factor[..., None, :]
+    if n_quantities == 1:
+        amplitudes = amplitudes[..., 0, :]
+    if n_bootstrap is not None:
+        amplitudes = BootstrapArray(amplitudes)
+    return LaplaceFilterAmplitudes(
+        amplitudes=amplitudes,
+        chi2=chi2,
+        p_value=stats.chi2.sf(chi2, dof).item(),
+        dof=dof,
+        cdr=cdr(cov),
+    )
 
 
 def lfilter_spectrum(
@@ -167,7 +342,7 @@ def lfilter_spectrum(
     init_lambda: float = 100.0,
     ncall: int = 5000,
     workers: int = 1,
-) -> LaplaceFilterSpectrum[npt.NDArray] | LaplaceFilterSpectrum[BootstrapArray]:
+) -> LaplaceFilterEnergies[npt.NDArray] | LaplaceFilterEnergies[BootstrapArray]:
     """Fit a fixed number of Laplace-filter states.
 
     Args:
@@ -191,10 +366,6 @@ def lfilter_spectrum(
     if isinstance(data, BootstrapArray):
         data = [data]
     if not isinstance(data, list):
-        raise TypeError("data must be CorrelatedData or a list of BootstrapArray")
-    if not data:
-        raise ValueError("bootstrap data list is empty")
-    if not all(isinstance(datum, BootstrapArray) for datum in data):
         raise TypeError("data must be CorrelatedData or a list of BootstrapArray")
     if workers < 1:
         raise ValueError("workers must be positive")
@@ -259,12 +430,13 @@ def lfilter_spectrum(
             ):
                 lambdas[indices + 1] = batch_lambdas
                 energies[indices + 1] = batch_energies
-    return LaplaceFilterSpectrum(
+    return LaplaceFilterEnergies(
         energies=BootstrapArray(energies),
         lambdas=BootstrapArray(lambdas),
         t2=central.t2,
         p_value=central.p_value,
         dof=central.dof,
+        cdr=central.cdr,
     )
 
 

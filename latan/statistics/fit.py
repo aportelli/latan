@@ -6,6 +6,7 @@ from typing import Sequence, cast, overload
 
 import numpy as np
 import numpy.typing as npt
+from iminuit import Minuit
 from scipy import stats
 from scipy.optimize import least_squares
 
@@ -41,18 +42,38 @@ class FitResult[T: npt.NDArray]:
         return cast(T, self.parameters[..., self.n_model_parameters :])
 
 
-# chi2 minimization helper
-# least-squares on residuals was tested to be generally faster than Minuit
+# chi^2 minimization helper
+# least-squares efficiently finds the minimum before Minuit validates and refines it
+# SciPy least_squares is fast but tends to miss fit that have not converged,
+# Minuit is slower but more conservative with checks.
 def _minimize(chi2: Chi2, initial: npt.NDArray, ncall: int) -> npt.NDArray:
+    # first LM least-squares pass
     result = least_squares(
         chi2.residual,
         initial,
         method="lm",
         max_nfev=ncall,
     )
-    if not result.success:
-        raise RuntimeError(f"fit failed: {result.message}")
-    return result.x
+    chi2_value = chi2(result.x)
+    if not np.isfinite(chi2_value):
+        raise RuntimeError("fit produced a non-finite chi2")
+
+    # cost function using iMinuit call convention
+    def cost(*parameters: float) -> float:
+        return chi2(np.asarray(parameters))
+
+    # final Minuit pass
+    minimum = Minuit(cost, *result.x)
+    minuit_result = minimum.migrad(ncall=ncall)
+    assert minuit_result.fmin is not None
+    if not minuit_result.fmin.is_valid:
+        print("warning: invalid minimum")
+
+    parameters = np.asarray(minimum.values)
+    chi2_value = chi2(parameters)
+    if not np.isfinite(chi2_value):
+        raise RuntimeError("fit produced a non-finite chi2")
+    return parameters
 
 
 # helper fitting a batch of bootstrap samples

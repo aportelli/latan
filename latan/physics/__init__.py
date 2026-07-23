@@ -1,12 +1,16 @@
-from latan.physics.laplace_filter import (LaplaceFilterSpectrum,
+from latan.physics.effective_mass import (eff_mass_cosh, eff_mass_log,)
+from latan.physics.laplace_filter import (LaplaceFilterAmplitudes,
+                                          LaplaceFilterEnergies,
                                           LaplaceFilterSpectrumTest,
                                           LaplaceFilteredT2, lfilter,
+                                          lfilter_amplitudes,
                                           lfilter_correlated_data,
                                           lfilter_factor, lfilter_spectrum,
                                           lfilter_spectrum_test, lfilter_tilde,
                                           lfilter_tilde_inv,)
 
-__all__ = ['LaplaceFilterSpectrum', 'LaplaceFilterSpectrumTest',
-           'LaplaceFilteredT2', 'lfilter', 'lfilter_correlated_data',
-           'lfilter_factor', 'lfilter_spectrum', 'lfilter_spectrum_test',
-           'lfilter_tilde', 'lfilter_tilde_inv']
+__all__ = ['LaplaceFilterAmplitudes', 'LaplaceFilterEnergies',
+           'LaplaceFilterSpectrumTest', 'LaplaceFilteredT2', 'eff_mass_cosh',
+           'eff_mass_log', 'lfilter', 'lfilter_amplitudes',
+           'lfilter_correlated_data', 'lfilter_factor', 'lfilter_spectrum',
+           'lfilter_spectrum_test', 'lfilter_tilde', 'lfilter_tilde_inv']
