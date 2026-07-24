@@ -10,6 +10,10 @@ import numpy.typing as npt
 from iminuit import Minuit
 from scipy import stats
 
+from latan.display.laplace_filter import (
+    render_laplace_filter_amplitudes_html,
+    render_laplace_filter_energies_html,
+)
 from latan.physics.laplace_filter.filter import (
     lfilter,
     lfilter_correlated_data,
@@ -31,6 +35,31 @@ class LaplaceFilterEnergies[T: npt.NDArray]:
     dof: int
     cdr: float
 
+    def __repr__(self) -> str:
+        msg = ""
+        if isinstance(self.energies, BootstrapArray):
+            energies = self.energies.central
+            energy_err = self.energies.std()
+            assert isinstance(self.lambdas, BootstrapArray)
+            lambdas = self.lambdas.central
+            lambda_err = self.lambdas.std()
+            for i, (energy, error, lamb, lamb_error) in enumerate(
+                zip(energies, energy_err, lambdas, lambda_err)
+            ):
+                msg += (
+                    f"E_{i} = {energy:.4g} ± {error:.4g}, "
+                    f"lambda_{i} = {lamb:.4g} ± {lamb_error:.4g}\n"
+                )
+        else:
+            for i, (energy, lamb) in enumerate(zip(self.energies, self.lambdas)):
+                msg += f"E_{i} = {energy:.4g}, lambda_{i} = {lamb:.4g}\n"
+        msg += f"T^2/dof = {self.t2:.4g}/{self.dof} = {self.t2 / self.dof:.2g}\n"
+        msg += f"  p-value = {self.p_value:.2g}\n"
+        msg += f"CDR at minimum {self.cdr:.2g} dB"
+        return msg
+
+    def _repr_html_(self) -> str:
+        return render_laplace_filter_energies_html(self)
 
 @dataclass
 class LaplaceFilterAmplitudes[T: npt.NDArray]:
@@ -40,6 +69,25 @@ class LaplaceFilterAmplitudes[T: npt.NDArray]:
     dof: int
     cdr: float
 
+    def __repr__(self) -> str:
+        msg = ""
+        if isinstance(self.amplitudes, BootstrapArray):
+            amplitudes = self.amplitudes.central
+            errors = self.amplitudes.std()
+            for index in np.ndindex(amplitudes.shape):
+                label = "_".join(str(i) for i in index)
+                msg += f"A_{label} = {amplitudes[index]:.4g} ± {errors[index]:.4g}\n"
+        else:
+            for index in np.ndindex(self.amplitudes.shape):
+                label = "_".join(str(i) for i in index)
+                msg += f"A_{label} = {self.amplitudes[index]:.4g}\n"
+        msg += f"chi^2/dof = {self.chi2:.4g}/{self.dof} = {self.chi2 / self.dof:.2g}\n"
+        msg += f"  p-value = {self.p_value:.2g}\n"
+        msg += f"CDR at minimum {self.cdr:.2g} dB"
+        return msg
+
+    def _repr_html_(self) -> str:
+        return render_laplace_filter_amplitudes_html(self)
 
 @dataclass
 class LaplaceFilterSpectrumTest:
@@ -187,6 +235,7 @@ def lfilter_amplitudes(
     lambdas: npt.NDArray,
     *,
     amplitude_lambda: Optional[float] = None,
+    time_period: Optional[int] = None,
 ) -> LaplaceFilterAmplitudes[npt.NDArray]: ...
 
 
@@ -197,6 +246,7 @@ def lfilter_amplitudes(
     lambdas: npt.NDArray | BootstrapArray,
     *,
     amplitude_lambda: Optional[float] = None,
+    time_period: Optional[int] = None,
 ) -> LaplaceFilterAmplitudes[BootstrapArray]: ...
 
 
@@ -206,6 +256,7 @@ def lfilter_amplitudes(
     lambdas: npt.NDArray | BootstrapArray,
     *,
     amplitude_lambda: Optional[float] = None,
+    time_period: Optional[int] = None,
 ) -> LaplaceFilterAmplitudes[npt.NDArray] | LaplaceFilterAmplitudes[BootstrapArray]:
     """Determine amplitudes from spectrum through a linear regression.
 
@@ -214,6 +265,9 @@ def lfilter_amplitudes(
     An optional Laplace filter regulator can be provided to improve the conditioning
     of the correlation matrix. If provided, the resulting amplitudes are corrected to
     fit the unfiltered data.
+
+    When `time_period` is provided, the regression basis includes the backward
+    propagator appropriate for periodic time boundaries.
     """
     if isinstance(ranges, tuple):
         ranges = [ranges]
@@ -272,7 +326,7 @@ def lfilter_amplitudes(
 
     # build Laplace transform matrix
     #
-    # L_ti = exp(-E_i*t)
+    # L_ti = exp(-E_i*t) + exp(-E_i*(T-t)) for periodic time boundaries
     #
     # if several quantities are present, L is extended as a block-diagonal matrix for
     # every time range.
@@ -281,6 +335,8 @@ def lfilter_amplitudes(
     for quantity, (start, stop) in enumerate(ranges):
         time = np.arange(start, stop)
         block = np.exp(-energies[..., :, None] * time)
+        if time_period is not None:
+            block += np.exp(-energies[..., :, None] * (time_period - time))
         size = time.size
         lmat[
             ...,

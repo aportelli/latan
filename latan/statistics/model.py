@@ -1,4 +1,4 @@
-from typing import Callable, TypeAlias
+from typing import Callable, Sequence, TypeAlias
 
 import numpy as np
 import numpy.typing as npt
@@ -16,7 +16,12 @@ class Model:
 
     Example:
         ```python
-        model = Model(lambda x, p: p[..., 0] + p[..., 1] * x[..., 0], 1, 2)
+        model = Model(
+            lambda x, p: p[..., 0] + p[..., 1] * x[..., 0],
+            1,
+            2,
+            parameter_names=("intercept", "slope"),
+        )
         y = model(np.array([[0.0], [1.0]]), np.array([1.0, 2.0]))
         ```
     """
@@ -24,14 +29,23 @@ class Model:
     _function: ModelFunction
     _n_var: int
     _n_par: int
+    _parameter_names: tuple[str, ...]
 
-    def __init__(self, function: ModelFunction, n_var: int, n_par: int) -> None:
+    def __init__(
+        self,
+        function: ModelFunction,
+        n_var: int,
+        n_par: int,
+        *,
+        parameter_names: Sequence[str] | None = None,
+    ) -> None:
         """Create a model with fixed variable and parameter dimensions.
 
         Args:
             function: A callable `function(x, p)` returning a NumPy array.
             n_var: Number of variables stored on the final x axis.
             n_par: Number of parameters stored on the final p axis.
+            parameter_names: Optional display names for model parameters.
         """
         if n_var < 1:
             raise ValueError("n_var must be positive")
@@ -40,6 +54,17 @@ class Model:
         self._function = function
         self._n_var = n_var
         self._n_par = n_par
+        if parameter_names is None:
+            self._parameter_names = tuple(f"p_{i}" for i in range(n_par))
+        else:
+            self._parameter_names = tuple(parameter_names)
+            if len(self._parameter_names) != n_par:
+                raise ValueError(
+                    f"parameter_names must have length {n_par}, "
+                    f"got {len(self._parameter_names)}"
+                )
+            if not all(isinstance(name, str) for name in self._parameter_names):
+                raise TypeError("parameter_names must contain only strings")
 
     @property
     def n_var(self) -> int:
@@ -50,6 +75,11 @@ class Model:
     def n_par(self) -> int:
         """Number of parameters expected on the final p axis."""
         return self._n_par
+
+    @property
+    def parameter_names(self) -> tuple[str, ...]:
+        """Display names for model parameters."""
+        return self._parameter_names
 
     def __call__(self, x: npt.NDArray, p: npt.NDArray) -> npt.NDArray:
         """Validate dimensions and forward x and p to the wrapped function.

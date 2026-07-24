@@ -1,4 +1,4 @@
-__private__ = ["datasets", "plot"]
+__private__ = ["datasets", "plot", "display"]
 from latan.physics import (LaplaceFilterAmplitudes, LaplaceFilterEnergies,
                            LaplaceFilterSpectrumTest, LaplaceFilteredT2,
                            eff_mass_cosh, eff_mass_log, lfilter,
