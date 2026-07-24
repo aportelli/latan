@@ -39,10 +39,10 @@ class LaplaceFilterEnergies[T: npt.NDArray]:
         msg = ""
         if isinstance(self.energies, BootstrapArray):
             energies = self.energies.central
-            energy_err = self.energies.std()
+            energy_err = self.energies.error()
             assert isinstance(self.lambdas, BootstrapArray)
             lambdas = self.lambdas.central
-            lambda_err = self.lambdas.std()
+            lambda_err = self.lambdas.error()
             for i, (energy, error, lamb, lamb_error) in enumerate(
                 zip(energies, energy_err, lambdas, lambda_err)
             ):
@@ -73,7 +73,7 @@ class LaplaceFilterAmplitudes[T: npt.NDArray]:
         msg = ""
         if isinstance(self.amplitudes, BootstrapArray):
             amplitudes = self.amplitudes.central
-            errors = self.amplitudes.std()
+            errors = self.amplitudes.error()
             for index in np.ndindex(amplitudes.shape):
                 label = "_".join(str(i) for i in index)
                 msg += f"A_{label} = {amplitudes[index]:.4g} ± {errors[index]:.4g}\n"

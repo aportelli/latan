@@ -30,9 +30,9 @@ def render_laplace_filter_energies_html[T: npt.NDArray](
             for i, (energy, error, lamb, lamb_error) in enumerate(
                 zip(
                     result.energies.central,
-                    result.energies.std(),
+                    result.energies.error(),
                     result.lambdas.central,
-                    result.lambdas.std(),
+                    result.lambdas.error(),
                 )
             )
         )
@@ -82,7 +82,7 @@ def render_laplace_filter_amplitudes_html[T: npt.NDArray](
         else result.amplitudes
     )
     errors = (
-        result.amplitudes.std()
+        result.amplitudes.error()
         if isinstance(result.amplitudes, BootstrapArray)
         else None
     )

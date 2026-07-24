@@ -198,7 +198,7 @@ def lfilter_tilde_inv(lamb: npt.ArrayLike) -> np.floating | npt.NDArray: ...
 
 
 def lfilter_tilde_inv(lamb: npt.ArrayLike) -> np.floating | npt.NDArray:
-    return 2.0 * np.arcsinh(lamb / 2.0)
+    return 2.0 * np.arcsinh(np.multiply(0.5, lamb))
 
 
 @overload

@@ -55,7 +55,7 @@ class FitResult[T: npt.NDArray]:
         msg = ""
         if isinstance(self.parameters, BootstrapArray):
             mean = self.parameters.central
-            err = self.parameters.std()
+            err = self.parameters.error()
             for name, value, error in zip(self._display_parameter_names, mean, err):
                 msg += f"{name} = {value:.4g} ± {error:.4g}\n"
         else:

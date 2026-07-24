@@ -29,7 +29,7 @@ class BootstrapArray(np.ndarray):
     def cov(self) -> npt.NDArray:
         return np.cov(self.samples, rowvar=False)
 
-    def std(self) -> npt.NDArray:
+    def error(self) -> npt.NDArray:
         return np.std(self.samples, axis=0)
 
 

@@ -17,7 +17,7 @@ def render_fit_result_html[T: npt.NDArray](result: "FitResult[T]") -> str:
 
     if isinstance(result.parameters, BootstrapArray):
         mean = result.parameters.central
-        err = result.parameters.std()
+        err = result.parameters.error()
         parameter_rows = "".join(
             "<tr>"
             f"<td>{escape(name)}</td>"
