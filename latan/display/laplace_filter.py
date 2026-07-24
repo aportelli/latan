@@ -7,8 +7,8 @@ from latan.display._common import p_value_colour
 from latan.statistics.bootstrap import BootstrapArray
 
 if TYPE_CHECKING:
+    from latan.physics.laplace_filter.amplitudes import LaplaceFilterAmplitudes
     from latan.physics.laplace_filter.spectrum import (
-        LaplaceFilterAmplitudes,
         LaplaceFilterEnergies,
     )
 
