@@ -37,3 +37,29 @@ jobs:
         uses: pypa/gh-action-pypi-publish@v1.14.1
         with:
           repository-url: https://test.pypi.org/legacy/
+
+  validate-published-package:
+    name: Validate published package
+    needs: [checks, publish]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: astral-sh/setup-uv@v8.1.0
+
+      - name: Install and validate uploaded package
+        env:
+          PACKAGE_VERSION: ${{ needs.checks.outputs.package_version }}
+        run: |
+          for attempt in {1..10}; do
+            if uv run --no-project --python 3.12 \
+              --index https://test.pypi.org/simple/ \
+              --default-index https://pypi.org/simple/ \
+              --with "latan==$PACKAGE_VERSION" \
+              python -c 'import latan; import numpy as np; np.testing.assert_allclose(latan.eff_mass_log(np.array([1.0, 0.5, 0.25])), np.log(2.0))'; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 10 ]; then
+              exit 1
+            fi
+            sleep 15
+          done

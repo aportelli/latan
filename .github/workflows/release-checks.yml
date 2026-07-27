@@ -7,11 +7,31 @@ on:
         description: Require the Git ref to match the project version.
         required: true
         type: boolean
+    outputs:
+      package_version:
+        description: Version read from pyproject.toml.
+        value: ${{ jobs.build.outputs.package_version }}
 
 permissions:
   contents: read
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Run Ruff
+        run: uv run --locked --python 3.12 ruff check .
+
   test:
     name: Test Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
@@ -31,18 +51,14 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install dependencies
-        run: uv sync --group dev --locked --python ${{ matrix.python-version }}
-
       - name: Check release tag
         if: inputs.require-release-tag
-        run: >-
-          uv run --locked --python ${{ matrix.python-version }} python -c
-          'import os, tomllib; from pathlib import Path; version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]; tag = os.environ["GITHUB_REF_NAME"]; assert tag == f"v{version}", f"tag {tag!r} does not match project version v{version}"'
-
-      - name: Lint
-        run: >-
-          uv run --locked --python ${{ matrix.python-version }} ruff check .
+        run: |
+          expected_tag="v$(uv version --short)"
+          test "$GITHUB_REF_NAME" = "$expected_tag" || {
+            echo "tag $GITHUB_REF_NAME does not match project version $expected_tag"
+            exit 1
+          }
 
       - name: Run unit tests
         run: >-
@@ -51,8 +67,10 @@ jobs:
 
   build:
     name: Build and validate package
-    needs: test
+    needs: [lint, test]
     runs-on: ubuntu-latest
+    outputs:
+      package_version: ${{ steps.package.outputs.version }}
 
     steps:
       - uses: actions/checkout@v6.0.2
@@ -60,6 +78,10 @@ jobs:
           persist-credentials: false
 
       - uses: astral-sh/setup-uv@v8.1.0
+
+      - name: Read package version
+        id: package
+        run: echo "version=$(uv version --short)" >> "$GITHUB_OUTPUT"
 
       - name: Build distributions
         run: uv build --no-sources
