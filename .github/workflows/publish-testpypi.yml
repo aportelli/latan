@@ -45,6 +45,9 @@ jobs:
 
     steps:
       - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: false
+          ignore-empty-workdir: true
 
       - name: Install and validate uploaded package
         env:
