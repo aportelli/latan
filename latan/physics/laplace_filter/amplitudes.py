@@ -20,6 +20,7 @@ from latan.statistics.correlation import cdr, cov_inverse_multiply, cov_quadrati
 @dataclass
 class LaplaceFilterAmplitudes[T: npt.NDArray]:
     amplitudes: T
+    ranges: Tuple[Tuple[int, int], ...]
     chi2: float
     p_value: float
     dof: int
@@ -37,6 +38,8 @@ class LaplaceFilterAmplitudes[T: npt.NDArray]:
             for index in np.ndindex(self.amplitudes.shape):
                 label = "_".join(str(i) for i in index)
                 msg += f"A_{label} = {self.amplitudes[index]:.4g}\n"
+        ranges = ", ".join(f"[{start}, {stop})" for start, stop in self.ranges)
+        msg += f"time range = {ranges}\n"
         msg += f"chi^2/dof = {self.chi2:.4g}/{self.dof} = {self.chi2 / self.dof:.2g}\n"
         msg += f"  p-value = {self.p_value:.2g}\n"
         msg += f"CDR at minimum {self.cdr:.2g} dB"
@@ -199,6 +202,7 @@ def lfilter_amplitudes(
         amplitudes = BootstrapArray(amplitudes)
     return LaplaceFilterAmplitudes(
         amplitudes=amplitudes,
+        ranges=tuple(ranges),
         chi2=chi2,
         p_value=stats.chi2.sf(chi2, dof).item(),
         dof=dof,

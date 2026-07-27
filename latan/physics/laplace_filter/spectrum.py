@@ -27,6 +27,7 @@ from latan.statistics.correlation import cdr
 class LaplaceFilterEnergies[T: npt.NDArray]:
     energies: T
     lambdas: T
+    ranges: Tuple[Tuple[int, int], ...]
     t2: float
     p_value: float
     dof: int
@@ -50,6 +51,8 @@ class LaplaceFilterEnergies[T: npt.NDArray]:
         else:
             for i, (energy, lamb) in enumerate(zip(self.energies, self.lambdas)):
                 msg += f"E_{i} = {energy:.4g}, lambda_{i} = {lamb:.4g}\n"
+        ranges = ", ".join(f"[{start}, {stop})" for start, stop in self.ranges)
+        msg += f"time range = {ranges}\n"
         msg += f"T^2/dof = {self.t2:.4g}/{self.dof} = {self.t2 / self.dof:.2g}\n"
         msg += f"  p-value = {self.p_value:.2g}\n"
         msg += f"CDR at minimum {self.cdr:.2g} dB"
@@ -135,6 +138,7 @@ def _lfilter_spectrum(
     spectrum = LaplaceFilterEnergies(
         energies=lfilter_tilde_inv(lambdas),
         lambdas=lambdas,
+        ranges=tuple(ranges),
         t2=t2,
         p_value=stats.chi2.sf(t2, dof).item(),
         dof=dof,
@@ -299,6 +303,7 @@ def lfilter_spectrum(
     return LaplaceFilterEnergies(
         energies=BootstrapArray(energies),
         lambdas=BootstrapArray(lambdas),
+        ranges=central.ranges,
         t2=central.t2,
         p_value=central.p_value,
         dof=central.dof,

@@ -19,6 +19,7 @@ def render_laplace_filter_energies_html[T: npt.NDArray](
     """Render a compact spectrum summary in Jupyter notebooks."""
     p_value = float(result.p_value)
     significance, colour = p_value_colour(p_value)
+    ranges = ", ".join(f"[{start}, {stop})" for start, stop in result.ranges)
 
     if isinstance(result.energies, BootstrapArray):
         assert isinstance(result.lambdas, BootstrapArray)
@@ -54,6 +55,9 @@ def render_laplace_filter_energies_html[T: npt.NDArray](
             <td colspan=\"2\">T<sup>2</sup> / dof = {result.t2:.4g} / {result.dof} = {result.t2 / result.dof:.2g}</td>
           </tr>
           <tr>
+            <td colspan=\"2\">Time range = {ranges}</td>
+          </tr>
+          <tr>
             <td colspan=\"2\" style=\"text-align:center;background-color:{colour};color:black\">
               p = {p_value:.2g} ({significance:.2g}σ)
             </td>
@@ -75,6 +79,7 @@ def render_laplace_filter_amplitudes_html[T: npt.NDArray](
     """Render a compact amplitude summary in Jupyter notebooks."""
     p_value = float(result.p_value)
     significance, colour = p_value_colour(p_value)
+    ranges = ", ".join(f"[{start}, {stop})" for start, stop in result.ranges)
 
     amplitudes = (
         result.amplitudes.central
@@ -103,6 +108,9 @@ def render_laplace_filter_amplitudes_html[T: npt.NDArray](
           <tr><th colspan=\"2\" style=\"text-align:center\">Laplace-filter amplitudes</th></tr>
           <tr>
             <td colspan=\"2\">χ<sup>2</sup> / dof = {result.chi2:.4g} / {result.dof} = {result.chi2 / result.dof:.2g}</td>
+          </tr>
+          <tr>
+            <td colspan=\"2\">Time range = {ranges}</td>
           </tr>
           <tr>
             <td colspan=\"2\" style=\"text-align:center;background-color:{colour};color:black\">
