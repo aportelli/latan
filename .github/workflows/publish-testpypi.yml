@@ -1,0 +1,39 @@
+name: Publish to TestPyPI
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testpypi-publish
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    uses: ./.github/workflows/release-checks.yml
+    with:
+      require-release-tag: false
+
+  publish:
+    name: Publish to TestPyPI
+    needs: checks
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/latan/
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v6
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish distributions
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/

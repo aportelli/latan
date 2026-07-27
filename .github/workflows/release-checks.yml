@@ -1,0 +1,74 @@
+name: Release checks
+
+on:
+  workflow_call:
+    inputs:
+      require-release-tag:
+        description: Require the Git ref to match the project version.
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.12"
+          - "3.13"
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --group dev --locked --python ${{ matrix.python-version }}
+
+      - name: Check release tag
+        if: inputs.require-release-tag
+        run: >-
+          uv run --locked --python ${{ matrix.python-version }} python -c
+          'import os, tomllib; from pathlib import Path; version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]; tag = os.environ["GITHUB_REF_NAME"]; assert tag == f"v{version}", f"tag {tag!r} does not match project version v{version}"'
+
+      - name: Lint
+        run: >-
+          uv run --locked --python ${{ matrix.python-version }} ruff check .
+
+      - name: Run unit tests
+        run: >-
+          uv run --locked --python ${{ matrix.python-version }}
+          python -m unittest discover -s tests
+
+  build:
+    name: Build and validate package
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v9.0.0
+
+      - name: Build distributions
+        run: uv build --no-sources
+
+      - name: Validate distribution metadata
+        run: uv run --with twine twine check dist/*
+
+      - name: Store distributions
+        uses: actions/upload-artifact@v5
+        with:
+          name: python-package-distributions
+          path: dist/
