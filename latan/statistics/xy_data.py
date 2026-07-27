@@ -1,5 +1,5 @@
+from collections.abc import Sequence
 from numbers import Integral, Real
-from typing import Optional, Sequence, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -38,11 +38,11 @@ class XYData:
     """
 
     _data: CorrelatedData
-    _x: Tuple[int | npt.NDArray, ...]
-    _x_map: Tuple[npt.NDArray, ...]
-    _y_indices: Tuple[int, ...]
-    _x_names: Tuple[str, ...]
-    _y_names: Tuple[str, ...]
+    _x: tuple[int | npt.NDArray, ...]
+    _x_map: tuple[npt.NDArray, ...]
+    _y_indices: tuple[int, ...]
+    _x_names: tuple[str, ...]
+    _y_names: tuple[str, ...]
     _n_points: int
     _exact_x: frozenset[int]
 
@@ -136,7 +136,7 @@ class XYData:
 
         def normalize_names(
             names: Sequence[str] | None, count: int, prefix: str
-        ) -> Tuple[str, ...]:
+        ) -> tuple[str, ...]:
             if names is None:
                 return tuple(f"{prefix}{i}" for i in range(count))
             names = tuple(names)
@@ -187,22 +187,22 @@ class XYData:
         return len(self._y_indices)
 
     @property
-    def x_indices(self) -> Tuple[Optional[int], ...]:
+    def x_indices(self) -> tuple[int | None, ...]:
         return tuple(
             None if isinstance(value, np.ndarray) else value for value in self._x
         )
 
     @property
-    def y_indices(self) -> Tuple[int, ...]:
+    def y_indices(self) -> tuple[int, ...]:
         return self._y_indices
 
     @property
-    def x_names(self) -> Tuple[str, ...]:
+    def x_names(self) -> tuple[str, ...]:
         """Names of x coordinates."""
         return self._x_names
 
     @property
-    def y_names(self) -> Tuple[str, ...]:
+    def y_names(self) -> tuple[str, ...]:
         """Names of y coordinates."""
         return self._y_names
 
@@ -231,8 +231,8 @@ class XYData:
 
     def point_mask(
         self,
-        include: Sequence[Tuple[float | None, float | None]] | None = None,
-        exclude: Sequence[Tuple[float | None, float | None]] | None = None,
+        include: Sequence[tuple[float | None, float | None]] | None = None,
+        exclude: Sequence[tuple[float | None, float | None]] | None = None,
     ) -> npt.NDArray[np.bool_]:
         """Return points selected by closed coordinate intervals.
 
@@ -243,7 +243,7 @@ class XYData:
         """
 
         def range_mask(
-            ranges: Sequence[Tuple[float | None, float | None]], name: str
+            ranges: Sequence[tuple[float | None, float | None]], name: str
         ) -> npt.NDArray[np.bool_]:
             if len(ranges) != len(self._x):
                 raise ValueError(

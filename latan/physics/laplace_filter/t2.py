@@ -1,4 +1,3 @@
-from typing import List, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -17,10 +16,10 @@ class LaplaceFilteredT2:
     """
 
     _data: CorrelatedData
-    _ranges: List[Tuple[int, int]]
+    _ranges: list[tuple[int, int]]
     _filtered_data: CorrelatedData
 
-    def __init__(self, data: CorrelatedData, ranges: List[Tuple[int, int]]) -> None:
+    def __init__(self, data: CorrelatedData, ranges: list[tuple[int, int]]) -> None:
         """Create a Laplace-filtered T-squared function.
 
         Args:
@@ -44,7 +43,7 @@ class LaplaceFilteredT2:
         self._filtered_data = CorrelatedData(mean_buf, cov_buf)
 
     @property
-    def ranges(self) -> Tuple[Tuple[int, int], ...]:
+    def ranges(self) -> tuple[tuple[int, int], ...]:
         """Half-open index intervals used for each data quantity."""
         return tuple(self._ranges)
 

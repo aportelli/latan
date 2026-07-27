@@ -1,4 +1,4 @@
-from typing import Sequence, Tuple
+from collections.abc import Sequence
 
 import numpy as np
 from matplotlib.axes import Axes
@@ -12,8 +12,8 @@ from latan.statistics.xy_data import XYData
 def xy_correlations(
     data: XYData,
     *,
-    include: Sequence[Tuple[float | None, float | None]] | None = None,
-    exclude: Sequence[Tuple[float | None, float | None]] | None = None,
+    include: Sequence[tuple[float | None, float | None]] | None = None,
+    exclude: Sequence[tuple[float | None, float | None]] | None = None,
     ax: Axes | None = None,
 ) -> tuple[Figure | SubFigure | None, Axes, AxesImage]:
     """Plot the selected correlation matrix of `XYData`.

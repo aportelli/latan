@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple, overload
+from typing import overload
 
 import numpy.typing as npt
 
@@ -22,13 +22,13 @@ def lfilter_full_spectrum(
     tf: int,
     n_state: int,
     *,
-    tested_states: Optional[int] = None,
+    tested_states: int | None = None,
     alpha: float = 0.05,
-    time_period: Optional[int] = None,
+    time_period: int | None = None,
     ncall: int = 5000,
     workers: int = 1,
     verbose: bool = False,
-) -> Tuple[
+) -> tuple[
     LaplaceFilterEnergies[npt.NDArray], LaplaceFilterAmplitudes[npt.NDArray]
 ]: ...
 
@@ -39,13 +39,13 @@ def lfilter_full_spectrum(
     tf: int,
     n_state: int,
     *,
-    tested_states: Optional[int] = None,
+    tested_states: int | None = None,
     alpha: float = 0.05,
-    time_period: Optional[int] = None,
+    time_period: int | None = None,
     ncall: int = 5000,
     workers: int = 1,
     verbose: bool = False,
-) -> Tuple[
+) -> tuple[
     LaplaceFilterEnergies[BootstrapArray], LaplaceFilterAmplitudes[BootstrapArray]
 ]: ...
 
@@ -55,13 +55,13 @@ def lfilter_full_spectrum(
     tf: int,
     n_state: int,
     *,
-    tested_states: Optional[int] = None,
+    tested_states: int | None = None,
     alpha: float = 0.05,
-    time_period: Optional[int] = None,
+    time_period: int | None = None,
     ncall: int = 5000,
     workers: int = 1,
     verbose: bool = False,
-) -> Tuple[LaplaceFilterEnergies, LaplaceFilterAmplitudes]:
+) -> tuple[LaplaceFilterEnergies, LaplaceFilterAmplitudes]:
     if tested_states is None:
         tested_states = n_state + 1
     if isinstance(data, CorrelatedData):

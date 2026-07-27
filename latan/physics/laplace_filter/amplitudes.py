@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, overload
+from typing import overload
 
 import numpy as np
 import numpy.typing as npt
@@ -20,7 +20,7 @@ from latan.statistics.correlation import cdr, cov_inverse_multiply, cov_quadrati
 @dataclass
 class LaplaceFilterAmplitudes[T: npt.NDArray]:
     amplitudes: T
-    ranges: Tuple[Tuple[int, int], ...]
+    ranges: tuple[tuple[int, int], ...]
     chi2: float
     p_value: float
     dof: int
@@ -52,32 +52,32 @@ class LaplaceFilterAmplitudes[T: npt.NDArray]:
 @overload
 def lfilter_amplitudes(
     data: CorrelatedData,
-    ranges: List[Tuple[int, int]] | Tuple[int, int],
+    ranges: list[tuple[int, int]] | tuple[int, int],
     lambdas: npt.NDArray,
     *,
-    amplitude_lambda: Optional[float] = None,
-    time_period: Optional[int] = None,
+    amplitude_lambda: float | None = None,
+    time_period: int | None = None,
 ) -> LaplaceFilterAmplitudes[npt.NDArray]: ...
 
 
 @overload
 def lfilter_amplitudes(
-    data: List[BootstrapArray] | BootstrapArray,
-    ranges: List[Tuple[int, int]] | Tuple[int, int],
+    data: list[BootstrapArray] | BootstrapArray,
+    ranges: list[tuple[int, int]] | tuple[int, int],
     lambdas: npt.NDArray | BootstrapArray,
     *,
-    amplitude_lambda: Optional[float] = None,
-    time_period: Optional[int] = None,
+    amplitude_lambda: float | None = None,
+    time_period: int | None = None,
 ) -> LaplaceFilterAmplitudes[BootstrapArray]: ...
 
 
 def lfilter_amplitudes(
-    data: CorrelatedData | List[BootstrapArray] | BootstrapArray,
-    ranges: List[Tuple[int, int]] | Tuple[int, int],
+    data: CorrelatedData | list[BootstrapArray] | BootstrapArray,
+    ranges: list[tuple[int, int]] | tuple[int, int],
     lambdas: npt.NDArray | BootstrapArray,
     *,
-    amplitude_lambda: Optional[float] = None,
-    time_period: Optional[int] = None,
+    amplitude_lambda: float | None = None,
+    time_period: int | None = None,
 ) -> LaplaceFilterAmplitudes[npt.NDArray] | LaplaceFilterAmplitudes[BootstrapArray]:
     """Determine amplitudes from spectrum through a linear regression.
 

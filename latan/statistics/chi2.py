@@ -1,4 +1,5 @@
-from typing import Literal, Sequence, Tuple, TypeAlias
+from collections.abc import Sequence
+from typing import Literal
 
 import numpy as np
 import numpy.typing as npt
@@ -12,7 +13,7 @@ from latan.statistics.correlation import (
 from latan.statistics.model import Model
 from latan.statistics.xy_data import XYData
 
-PointRanges: TypeAlias = Sequence[Tuple[float | None, float | None]]
+type PointRanges = Sequence[tuple[float | None, float | None]]
 
 
 class Chi2:
@@ -30,15 +31,15 @@ class Chi2:
     _include: PointRanges | None
     _exclude: PointRanges | None
     _active_pts: npt.NDArray[np.intp]
-    _inex_x_dim: Tuple[int, ...]
-    _inex_x_ind: Tuple[int, ...]
-    _inex_x_val_ind: Tuple[npt.NDArray[np.intp], ...]
-    _inex_x_obs_ind: Tuple[npt.NDArray[np.intp], ...]
+    _inex_x_dim: tuple[int, ...]
+    _inex_x_ind: tuple[int, ...]
+    _inex_x_val_ind: tuple[npt.NDArray[np.intp], ...]
+    _inex_x_obs_ind: tuple[npt.NDArray[np.intp], ...]
     _x_buf: npt.NDArray
     _y_buf: npt.NDArray
     _var_buffer: npt.NDArray
     _cov: npt.NDArray | None
-    _factor: Tuple[npt.NDArray, npt.NDArray] | None
+    _factor: tuple[npt.NDArray, npt.NDArray] | None
     _err: npt.NDArray
     _residual: npt.NDArray
     _x_residual: npt.NDArray

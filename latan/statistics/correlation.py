@@ -1,4 +1,3 @@
-from typing import Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -14,7 +13,7 @@ def cdr(mat: npt.NDArray, normalize: bool = True) -> float:
     return 10.0 * np.log10(s.max() / s.min())
 
 
-def cov_to_corr(cov: npt.NDArray) -> Tuple[npt.NDArray, npt.NDArray]:
+def cov_to_corr(cov: npt.NDArray) -> tuple[npt.NDArray, npt.NDArray]:
     err = np.sqrt(cov.diagonal())
     inverr = 1.0 / err
     corr = cov * np.outer(inverr, inverr)
@@ -27,7 +26,7 @@ def corr_to_cov(corr: npt.NDArray, err: npt.NDArray) -> npt.NDArray:
 
 def cov_factor(
     cov: npt.NDArray,
-) -> Tuple[npt.NDArray, npt.NDArray]:
+) -> tuple[npt.NDArray, npt.NDArray]:
     """Return a lower correlation Cholesky factor and standard deviations."""
     corr, err = cov_to_corr(cov)
     factor = linalg.cholesky(corr, lower=True, check_finite=False)
@@ -39,7 +38,7 @@ def _rhs(
     vector: npt.NDArray,
     err: npt.NDArray,
     out: npt.NDArray | None,
-) -> Tuple[npt.NDArray, npt.NDArray]:
+) -> tuple[npt.NDArray, npt.NDArray]:
     if vector.ndim == 0:
         raise ValueError("vector must have at least one dimension")
     n = vector.shape[-1]
@@ -57,9 +56,9 @@ def _rhs(
 
 def _factor(
     cov: npt.NDArray,
-    factor: Tuple[npt.NDArray, npt.NDArray] | None,
+    factor: tuple[npt.NDArray, npt.NDArray] | None,
     n: int,
-) -> Tuple[npt.NDArray, npt.NDArray]:
+) -> tuple[npt.NDArray, npt.NDArray]:
     if cov.shape != (n, n):
         raise ValueError(f"cov has shape {cov.shape}, expected ({n}, {n})")
     if factor is None:
@@ -73,7 +72,7 @@ def _factor(
 def cov_independent_residuals(
     residual: npt.NDArray,
     cov: npt.NDArray,
-    factor: Tuple[npt.NDArray, npt.NDArray] | None = None,
+    factor: tuple[npt.NDArray, npt.NDArray] | None = None,
     out: npt.NDArray | None = None,
 ) -> npt.NDArray:
     """Return statistically independent residuals.
@@ -113,7 +112,7 @@ def cov_independent_residuals(
 def cov_quadratic_form(
     residual: npt.NDArray,
     cov: npt.NDArray,
-    factor: Tuple[npt.NDArray, npt.NDArray] | None = None,
+    factor: tuple[npt.NDArray, npt.NDArray] | None = None,
     work: npt.NDArray | None = None,
 ) -> npt.NDArray:
     """Evaluate a covariance-normalized quadratic form from a lower factor.
@@ -139,7 +138,7 @@ def cov_quadratic_form(
 def cov_inverse_multiply(
     vector: npt.NDArray,
     cov: npt.NDArray,
-    factor: Tuple[npt.NDArray, npt.NDArray] | None = None,
+    factor: tuple[npt.NDArray, npt.NDArray] | None = None,
     out: npt.NDArray | None = None,
 ) -> npt.NDArray:
     """Multiply vectors by the inverse of a shared covariance matrix.

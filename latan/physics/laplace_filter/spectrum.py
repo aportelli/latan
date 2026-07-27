@@ -3,7 +3,7 @@ import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from functools import partial
-from typing import List, Optional, Tuple, overload
+from typing import overload
 
 import numpy as np
 import numpy.typing as npt
@@ -27,7 +27,7 @@ from latan.statistics.correlation import cdr
 class LaplaceFilterEnergies[T: npt.NDArray]:
     energies: T
     lambdas: T
-    ranges: Tuple[Tuple[int, int], ...]
+    ranges: tuple[tuple[int, int], ...]
     t2: float
     p_value: float
     dof: int
@@ -64,7 +64,7 @@ class LaplaceFilterEnergies[T: npt.NDArray]:
 
 @dataclass
 class LaplaceFilterSpectrumTest:
-    spectra: List[LaplaceFilterEnergies[npt.NDArray]] = field(default_factory=list)
+    spectra: list[LaplaceFilterEnergies[npt.NDArray]] = field(default_factory=list)
     dt2: npt.NDArray = field(default_factory=lambda: np.empty(0))
     pbar_val: npt.NDArray = field(default_factory=lambda: np.empty(0))
     sig_states: int = -1
@@ -72,11 +72,11 @@ class LaplaceFilterSpectrumTest:
 
 def _lfilter_spectrum(
     data: CorrelatedData,
-    ranges: List[Tuple[int, int]],
+    ranges: list[tuple[int, int]],
     n_state: int,
     *,
-    m_guess: Optional[float] = None,
-    initial_lambdas: Optional[npt.NDArray] = None,
+    m_guess: float | None = None,
+    initial_lambdas: npt.NDArray | None = None,
     init_lambda: float = 100.0,
     ncall: int = 5000,
 ) -> LaplaceFilterEnergies[npt.NDArray]:
@@ -149,14 +149,14 @@ def _lfilter_spectrum(
 
 def _spectrum_batch(
     indices: npt.NDArray,
-    samples: List[npt.NDArray],
-    covs: List[List[npt.NDArray]],
-    ranges: List[Tuple[int, int]],
+    samples: list[npt.NDArray],
+    covs: list[list[npt.NDArray]],
+    ranges: list[tuple[int, int]],
     n_state: int,
     initial_lambdas: npt.NDArray,
     init_lambda: float,
     ncall: int,
-) -> Tuple[npt.NDArray, npt.NDArray]:
+) -> tuple[npt.NDArray, npt.NDArray]:
     lambdas = np.empty((len(indices), n_state))
     energies = np.empty_like(lambdas)
     for row, index in enumerate(indices):
@@ -177,11 +177,11 @@ def _spectrum_batch(
 @overload
 def lfilter_spectrum(
     data: CorrelatedData,
-    ranges: List[Tuple[int, int]] | Tuple[int, int],
+    ranges: list[tuple[int, int]] | tuple[int, int],
     n_state: int,
     *,
-    m_guess: Optional[float] = None,
-    initial_lambdas: Optional[npt.NDArray] = None,
+    m_guess: float | None = None,
+    initial_lambdas: npt.NDArray | None = None,
     init_lambda: float = 100.0,
     ncall: int = 5000,
     workers: int = 1,
@@ -190,12 +190,12 @@ def lfilter_spectrum(
 
 @overload
 def lfilter_spectrum(
-    data: List[BootstrapArray] | BootstrapArray,
-    ranges: List[Tuple[int, int]] | Tuple[int, int],
+    data: list[BootstrapArray] | BootstrapArray,
+    ranges: list[tuple[int, int]] | tuple[int, int],
     n_state: int,
     *,
-    m_guess: Optional[float] = None,
-    initial_lambdas: Optional[npt.NDArray] = None,
+    m_guess: float | None = None,
+    initial_lambdas: npt.NDArray | None = None,
     init_lambda: float = 100.0,
     ncall: int = 5000,
     workers: int = 1,
@@ -203,12 +203,12 @@ def lfilter_spectrum(
 
 
 def lfilter_spectrum(
-    data: CorrelatedData | List[BootstrapArray] | BootstrapArray,
-    ranges: List[Tuple[int, int]] | Tuple[int, int],
+    data: CorrelatedData | list[BootstrapArray] | BootstrapArray,
+    ranges: list[tuple[int, int]] | tuple[int, int],
     n_state: int,
     *,
-    m_guess: Optional[float] = None,
-    initial_lambdas: Optional[npt.NDArray] = None,
+    m_guess: float | None = None,
+    initial_lambdas: npt.NDArray | None = None,
     init_lambda: float = 100.0,
     ncall: int = 5000,
     workers: int = 1,
@@ -313,7 +313,7 @@ def lfilter_spectrum(
 
 def lfilter_spectrum_test(
     data: CorrelatedData,
-    ranges: List[Tuple[int, int]],
+    ranges: list[tuple[int, int]],
     n_state: int,
     alpha: float = 0.05,
     verbose: bool = False,
@@ -341,7 +341,7 @@ def lfilter_spectrum_test(
     pb = []
     t2 = []
     dt2 = []
-    previous_lambs: Optional[npt.NDArray] = None
+    previous_lambs: npt.NDArray | None = None
     for r in range(1, n_state + 1):
         initial_lambdas = (
             None if previous_lambs is None else np.append(previous_lambs, init_lambda)

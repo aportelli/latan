@@ -1,11 +1,11 @@
-from typing import Callable, Sequence, TypeAlias
+from collections.abc import Callable, Sequence
 
 import numpy as np
 import numpy.typing as npt
 
 from latan.statistics.bootstrap import BootstrapArray
 
-ModelFunction: TypeAlias = Callable[[npt.NDArray, npt.NDArray], npt.NDArray]
+type ModelFunction = Callable[[npt.NDArray, npt.NDArray], npt.NDArray]
 
 
 class Model:

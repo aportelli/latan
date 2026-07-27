@@ -1,8 +1,9 @@
 import multiprocessing as mp
+from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from functools import partial
-from typing import Literal, Sequence, cast, overload
+from typing import Literal, cast, overload
 
 import numpy as np
 import numpy.typing as npt

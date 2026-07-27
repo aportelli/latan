@@ -1,4 +1,5 @@
-from typing import List, Optional, Sequence, Tuple, cast
+from collections.abc import Sequence
+from typing import cast
 
 import numpy as np
 import numpy.typing as npt
@@ -35,13 +36,13 @@ class CorrelatedData:
         ```
     """
 
-    _means: List[npt.NDArray]
-    _covs: List[List[npt.NDArray]]
+    _means: list[npt.NDArray]
+    _covs: list[list[npt.NDArray]]
 
     def __init__(
         self,
-        means: List[npt.NDArray] | npt.NDArray,
-        covs: List[List[npt.NDArray]] | npt.NDArray,
+        means: list[npt.NDArray] | npt.NDArray,
+        covs: list[list[npt.NDArray]] | npt.NDArray,
     ) -> None:
         """Create correlated vector data.
 
@@ -122,7 +123,7 @@ class CorrelatedData:
         self._validate_index(index)
         return self._means[index]
 
-    def set_means(self, means: List[npt.NDArray]) -> None:
+    def set_means(self, means: list[npt.NDArray]) -> None:
         if len(means) != self.n_quantities:
             raise ValueError(
                 f"number of means and quantities mismatch "
@@ -141,7 +142,7 @@ class CorrelatedData:
         return self._cov_block(i, j)
 
     @property
-    def covs(self) -> List[List[npt.NDArray]]:
+    def covs(self) -> list[list[npt.NDArray]]:
         return self._covs
 
     def uncorrelated(self) -> "CorrelatedData":
@@ -162,11 +163,11 @@ class CorrelatedData:
 
     def total_mean_cov(
         self,
-        ranges: Optional[Sequence[Tuple[int, int]]] = None,
+        ranges: Sequence[tuple[int, int]] | None = None,
         *,
-        indices: Optional[Sequence[npt.NDArray]] = None,
-        quantities: Optional[Sequence[int]] = None,
-    ) -> Tuple[npt.NDArray, npt.NDArray]:
+        indices: Sequence[npt.NDArray] | None = None,
+        quantities: Sequence[int] | None = None,
+    ) -> tuple[npt.NDArray, npt.NDArray]:
         """Assemble selected means and covariance blocks into one vector and matrix.
 
         Args:
@@ -232,7 +233,7 @@ class CorrelatedData:
                 for row, i in enumerate(quantities)
             ])
         else:
-            index_selections: List[npt.NDArray] = []
+            index_selections: list[npt.NDArray] = []
             for selection in selections:
                 assert isinstance(selection, np.ndarray)
                 index_selections.append(selection)
@@ -252,7 +253,7 @@ class CorrelatedData:
 
 
 def make_correlated_data(
-    data: List[BootstrapArray] | List[npt.NDArray] | BootstrapArray | npt.NDArray,
+    data: list[BootstrapArray] | list[npt.NDArray] | BootstrapArray | npt.NDArray,
 ) -> CorrelatedData:
     """Build correlated data from aligned bootstrap or primary samples.
 
@@ -278,7 +279,7 @@ def make_correlated_data(
         raise ValueError("data list is empty")
 
     if all(isinstance(datum, BootstrapArray) for datum in data):
-        bootstrap_data = cast(List[BootstrapArray], data)
+        bootstrap_data = cast(list[BootstrapArray], data)
         samples = [bootstrap.samples for bootstrap in bootstrap_data]
         means = [bootstrap.central for bootstrap in bootstrap_data]
         kind = "bootstrap"

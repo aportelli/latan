@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from copy import deepcopy
-from typing import Any, Mapping, Optional
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -38,7 +39,7 @@ class Bootstrap(ABC):
     _gen: np.random.Generator
     _initial_state: Mapping[str, Any]
 
-    def __init__(self, seed: Optional[int] = None) -> None:
+    def __init__(self, seed: int | None = None) -> None:
         super().__init__()
         self._bitgen = np.random.PCG64(seed)
         self._gen = np.random.Generator(self._bitgen)
@@ -61,7 +62,7 @@ class Bootstrap(ABC):
 
 
 class ParametricGaussianBootstrap(Bootstrap):
-    def __init__(self, seed: Optional[int] = None) -> None:
+    def __init__(self, seed: int | None = None) -> None:
         super().__init__(seed)
 
     def sample(self, data: npt.NDArray, size: int) -> BootstrapArray:
@@ -76,7 +77,7 @@ class ParametricGaussianBootstrap(Bootstrap):
 
 
 class NonparametricBootstrap(Bootstrap):
-    def __init__(self, seed: Optional[int] = None) -> None:
+    def __init__(self, seed: int | None = None) -> None:
         super().__init__(seed)
 
     def sample(self, data: npt.NDArray, size: int) -> BootstrapArray:
