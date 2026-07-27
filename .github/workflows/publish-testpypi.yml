@@ -54,6 +54,7 @@ jobs:
             if uv run --no-project --python 3.12 \
               --index https://test.pypi.org/simple/ \
               --default-index https://pypi.org/simple/ \
+              --index-strategy unsafe-best-match \
               --with "latan==$PACKAGE_VERSION" \
               python -c 'import latan; import numpy as np; np.testing.assert_allclose(latan.eff_mass_log(np.array([1.0, 0.5, 0.25])), np.log(2.0))'; then
               exit 0
