@@ -22,6 +22,7 @@ dev = [
     "jupyter>=1.1.1",
     "matplotlib-inline>=0.2.2",
     "mkinit>=1.2.0",
+    "ruff>=0.16.0",
     "tqdm>=4.68.4",
 ]
 
