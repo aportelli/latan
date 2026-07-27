@@ -373,7 +373,7 @@ def lfilter_spectrum_test(
     order = sorted(range(len(pb)), key=pb.__getitem__)
     max_reject = 0
     reject = ""
-    for j in range(0, n_state - 1):
+    for j in range(n_state - 1):
         if pb[order[j]] < alpha / (n_state - 1 - j):
             max_reject = max(max_reject, order[j] + 1)
             reject += f" H{order[j] + 1}"

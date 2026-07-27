@@ -122,9 +122,12 @@ class Model:
             raise TypeError("x or p must be a BootstrapArray")
 
         n_bootstrap = x.shape[0] if isinstance(x, BootstrapArray) else p.shape[0]
-        if isinstance(x, BootstrapArray) and isinstance(p, BootstrapArray):
-            if x.shape[0] != p.shape[0]:
-                raise ValueError("bootstrap x and p must have the same sample count")
+        if (
+            isinstance(x, BootstrapArray)
+            and isinstance(p, BootstrapArray)
+            and x.shape[0] != p.shape[0]
+        ):
+            raise ValueError("bootstrap x and p must have the same sample count")
 
         if isinstance(x, BootstrapArray) and not isinstance(p, BootstrapArray):
             p = np.broadcast_to(p, (n_bootstrap, *p.shape))

@@ -4,9 +4,9 @@ from latan.physics.effective_mass import (
 )
 from latan.physics.laplace_filter import (
     LaplaceFilterAmplitudes,
+    LaplaceFilteredT2,
     LaplaceFilterEnergies,
     LaplaceFilterSpectrumTest,
-    LaplaceFilteredT2,
     lfilter,
     lfilter_amplitudes,
     lfilter_correlated_data,

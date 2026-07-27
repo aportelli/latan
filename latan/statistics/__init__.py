@@ -6,7 +6,6 @@ from latan.statistics.bootstrap import (
 )
 from latan.statistics.chi2 import (
     Chi2,
-    PointRanges,
 )
 from latan.statistics.correlated_data import (
     CorrelatedData,
@@ -30,7 +29,6 @@ from latan.statistics.gaussian_rng import (
 )
 from latan.statistics.model import (
     Model,
-    ModelFunction,
 )
 from latan.statistics.xy_data import (
     XYData,
@@ -43,10 +41,8 @@ __all__ = [
     "CorrelatedData",
     "FitResult",
     "Model",
-    "ModelFunction",
     "NonparametricBootstrap",
     "ParametricGaussianBootstrap",
-    "PointRanges",
     "XYData",
     "cdr",
     "corr_to_cov",

@@ -26,7 +26,7 @@ def download(path: str) -> str:
 
 def load_correlator(filename: str, name: str, verbose: bool = False) -> npt.NDArray:
     file = h5py.File(filename)
-    if name not in file.keys():
+    if name not in file:
         raise RuntimeError(f"no dataset '{name}' in file '{filename}'")
     dset = file[f"{name}/dataset/data"]
     if isinstance(dset, h5py.Dataset):
@@ -40,7 +40,7 @@ def load_correlator(filename: str, name: str, verbose: bool = False) -> npt.NDAr
             print(f"   nt: {nt}")
         return buf
     else:
-        raise RuntimeError(
+        raise TypeError(
             f"cannot read dataset '{name}/dataset/data' in file '{filename}'"
         )
 
