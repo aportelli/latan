@@ -1,18 +1,42 @@
 [project]
 name = "latan"
+authors = [{ name = "Antonin Portelli", email = "antonin.portelli@me.com" }]
+license = "GPL-3.0-or-later"
 version = "0.1.0"
 description = "Statistical data analysis library for lattice field theory"
 readme = "README.md"
 requires-python = ">=3.12"
+license-files = ["LICENSE"]
+keywords = [
+    "lattice field theory",
+    "statistical analysis",
+    "correlated fitting",
+    "bootstrap",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Physics",
+]
 dependencies = [
     "h5py>=3.16.0",
     "iminuit>=2.32.0",
     "matplotlib>=3.11.0",
     "numba>=0.66.0",
     "numpy>=2.0,<2.5",
-    "pandas>=3.0.3",
     "scipy>=1.18.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/aportelli/latan"
+Repository = "https://github.com/aportelli/latan"
+Issues = "https://github.com/aportelli/latan/issues"
 
 [dependency-groups]
 dev = [
@@ -27,7 +51,7 @@ dev = [
 ]
 
 [build-system]
-requires = ["uv_build>=0.8.4,<0.9.0"]
+requires = ["uv_build>=0.11.23,<0.12"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
