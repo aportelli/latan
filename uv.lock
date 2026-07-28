@@ -1154,7 +1154,7 @@ wheels = [
 
 [[package]]
 name = "latan"
-version = "2026.7.0rc1"
+version = "2026.7.0"
 source = { editable = "." }
 dependencies = [
     { name = "h5py" },
