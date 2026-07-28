@@ -22,6 +22,9 @@ class Chi2:
     Inexact x coordinates are fitted as latent values. A mapped x coordinate
     contributes one latent value per selected unique raw x entry, even when
     several y observations refer to that entry.
+
+    This strategy is described in Boggs, Byrd, and Schnabel 1987,
+    https://doi.org/10.1137/0908085.
     """
 
     _xydata: XYData
