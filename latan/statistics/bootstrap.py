@@ -67,12 +67,23 @@ class ParametricGaussianBootstrap(Bootstrap):
 
     def sample(self, data: npt.NDArray, size: int) -> BootstrapArray:
         self._reset_state()
-        s = np.zeros([size + 1, *data.shape[1:]])
         n = data.shape[0]
-        mean = data.mean(axis=0)
-        var = np.cov(data, rowvar=False) / n
-        s[0] = mean
-        s[1:] = gaussian_sample(self._gen, size, mean, var)
+        shape = data.shape[1:]
+        dtype = data.dtype
+        flat = data.reshape(n, -1)
+        if np.iscomplexobj(data):
+            components = np.concatenate((np.real(flat), np.imag(flat)), axis=1)
+            mean = components.mean(axis=0)
+            var = np.atleast_2d(np.cov(components, rowvar=False)) / n
+            samples = gaussian_sample(self._gen, size, mean, var)
+            values = samples[:, : flat.shape[1]] + 1j * samples[:, flat.shape[1] :]
+        else:
+            mean = flat.mean(axis=0)
+            var = np.atleast_2d(np.cov(flat, rowvar=False)) / n
+            values = gaussian_sample(self._gen, size, mean, var)
+        s = np.empty([size + 1, *shape], dtype=dtype)
+        s[0] = flat.mean(axis=0).reshape(shape)
+        s[1:] = values.reshape(size, *shape)
         return BootstrapArray(s)
 
 
@@ -82,7 +93,8 @@ class NonparametricBootstrap(Bootstrap):
 
     def sample(self, data: npt.NDArray, size: int) -> BootstrapArray:
         self._reset_state()
-        s = np.zeros([size + 1, *data.shape[1:]])
+        dtype = data.dtype
+        s = np.empty([size + 1, *data.shape[1:]], dtype=dtype)
         n = data.shape[0]
         mean = data.mean(axis=0)
         ind = self._gen.integers(n, size=(n, size))

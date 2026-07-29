@@ -2,6 +2,9 @@ from latan.physics.effective_mass import (
     eff_mass_cosh,
     eff_mass_log,
 )
+from latan.physics.gevp import (
+    gevp,
+)
 from latan.physics.laplace_filter import (
     LaplaceFilterAmplitudes,
     LaplaceFilteredT2,
@@ -26,6 +29,7 @@ __all__ = [
     "LaplaceFilteredT2",
     "eff_mass_cosh",
     "eff_mass_log",
+    "gevp",
     "lfilter",
     "lfilter_amplitudes",
     "lfilter_correlated_data",

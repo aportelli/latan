@@ -31,6 +31,7 @@ dependencies = [
     "numba>=0.66.0",
     "numpy>=2.0,<2.5",
     "scipy>=1.18.0",
+    "tqdm>=4.68.4",
 ]
 
 [project.urls]
@@ -47,7 +48,6 @@ dev = [
     "matplotlib-inline>=0.2.2",
     "mkinit>=1.2.0",
     "ruff>=0.16.0",
-    "tqdm>=4.68.4",
 ]
 
 [build-system]
