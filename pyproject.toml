@@ -48,6 +48,7 @@ dev = [
     "matplotlib-inline>=0.2.2",
     "mkinit>=1.2.0",
     "ruff>=0.16.0",
+    "ty>=0.0.66",
 ]
 
 [build-system]

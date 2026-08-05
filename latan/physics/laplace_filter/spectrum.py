@@ -10,6 +10,13 @@ import numpy.typing as npt
 from iminuit import Minuit
 from scipy import stats
 
+from latan.display._common import (
+    asymmetric_error_text,
+    bootstrap_error_text,
+    bootstrap_normality,
+    non_gaussian_text,
+    normality_significance,
+)
 from latan.display.laplace_filter import (
     render_laplace_filter_energies_html,
 )
@@ -23,6 +30,26 @@ from latan.statistics.correlated_data import CorrelatedData, make_correlated_dat
 from latan.statistics.correlation import cdr
 
 
+def _spectrum_normality_text(
+    energy: float,
+    energy_lower: float,
+    energy_upper: float,
+    energy_non_gaussian: bool,
+    energy_p_value: float,
+    lamb: float,
+    lambda_lower: float,
+    lambda_upper: float,
+    lambda_non_gaussian: bool,
+    lambda_p_value: float,
+) -> str:
+    errors = ()
+    if energy_non_gaussian:
+        errors += (asymmetric_error_text(energy, energy_lower, energy_upper, "E"),)
+    if lambda_non_gaussian:
+        errors += (asymmetric_error_text(lamb, lambda_lower, lambda_upper, "λ"),)
+    return non_gaussian_text((energy_p_value, lambda_p_value), errors=errors)
+
+
 @dataclass
 class LaplaceFilterEnergies[T: npt.NDArray]:
     energies: T
@@ -34,19 +61,52 @@ class LaplaceFilterEnergies[T: npt.NDArray]:
     cdr: float
 
     def __repr__(self) -> str:
-        msg = ""
+        msg = "Laplace-filter spectrum\n"
         if isinstance(self.energies, BootstrapArray):
             energies = self.energies.central
             energy_err = self.energies.error()
             assert isinstance(self.lambdas, BootstrapArray)
             lambdas = self.lambdas.central
             lambda_err = self.lambdas.error()
-            for i, (energy, error, lamb, lamb_error) in enumerate(
-                zip(energies, energy_err, lambdas, lambda_err)
+            energy_lower, energy_upper, energy_ng, energy_normality_p = (
+                bootstrap_normality(self.energies)
+            )
+            lambda_lower, lambda_upper, lambda_ng, lambda_normality_p = (
+                bootstrap_normality(self.lambdas)
+            )
+            for i, (
+                energy,
+                error,
+                lamb,
+                lamb_error,
+                energy_lo,
+                energy_hi,
+                e_ng,
+                energy_p,
+                lambda_lo,
+                lambda_hi,
+                l_ng,
+                lambda_p,
+            ) in enumerate(
+                zip(
+                    energies,
+                    energy_err,
+                    lambdas,
+                    lambda_err,
+                    energy_lower,
+                    energy_upper,
+                    energy_ng,
+                    energy_normality_p,
+                    lambda_lower,
+                    lambda_upper,
+                    lambda_ng,
+                    lambda_normality_p,
+                )
             ):
                 msg += (
-                    f"E_{i} = {energy:.4g} ± {error:.4g}, "
-                    f"lambda_{i} = {lamb:.4g} ± {lamb_error:.4g}\n"
+                    f"E_{i} = {bootstrap_error_text(energy, error)}, "
+                    f"lambda_{i} = {bootstrap_error_text(lamb, lamb_error)}"
+                    f"{_spectrum_normality_text(energy, energy_lo, energy_hi, e_ng, energy_p, lamb, lambda_lo, lambda_hi, l_ng, lambda_p)}\n"
                 )
         else:
             for i, (energy, lamb) in enumerate(zip(self.energies, self.lambdas)):
@@ -54,8 +114,8 @@ class LaplaceFilterEnergies[T: npt.NDArray]:
         ranges = ", ".join(f"[{start}, {stop})" for start, stop in self.ranges)
         msg += f"time range = {ranges}\n"
         msg += f"T^2/dof = {self.t2:.4g}/{self.dof} = {self.t2 / self.dof:.2g}\n"
-        msg += f"  p-value = {self.p_value:.2g}\n"
-        msg += f"CDR at minimum {self.cdr:.2g} dB"
+        msg += f"p = {self.p_value:.2g} ({normality_significance(self.p_value):.2g}σ)\n"
+        msg += f"CDR at minimum = {self.cdr:.2g} dB"
         return msg
 
     def _repr_html_(self) -> str:

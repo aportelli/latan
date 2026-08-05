@@ -1,0 +1,79 @@
+name: Quality checks
+
+on:
+  workflow_call:
+    inputs:
+      require-release-tag:
+        description: Require the Git ref to match the project version.
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Run Ruff
+        run: uv run --locked --python 3.12 ruff check .
+
+  typecheck:
+    name: Type check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Run ty
+        run: uv run --locked --python 3.12 ty check
+
+  test:
+    name: Test Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.12"
+          - "3.13"
+
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Check release tag
+        if: inputs.require-release-tag
+        run: |
+          expected_tag="v$(uv version --short)"
+          test "$GITHUB_REF_NAME" = "$expected_tag" || {
+            echo "tag $GITHUB_REF_NAME does not match project version $expected_tag"
+            exit 1
+          }
+
+      - name: Run unit tests
+        run: >-
+          uv run --locked --python ${{ matrix.python-version }}
+          python -m unittest discover -s tests

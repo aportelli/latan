@@ -93,19 +93,11 @@ def lfilter(
     """
     if data.ndim == 0:
         raise ValueError("data must have at least one dimension")
-    if isinstance(lamb, np.ndarray) and lamb.ndim == 0:
-        lambs = [lamb.item()]
-    elif not isinstance(lamb, (Sequence, np.ndarray)):
-        lambs = [lamb]
-    else:
-        lambs = lamb
-    if not isinstance(dim, Sequence):
-        dims = [dim]
-    else:
-        dims = dim
-    n_ops = len(lambs) * len(dims)
+    lambs = np.atleast_1d(np.asarray(lamb, dtype=float))
+    dims = np.atleast_1d(np.asarray(dim, dtype=int))
+    n_ops = lambs.size * dims.size
     is_bootstrap = isinstance(data, BootstrapArray)
-    if is_bootstrap and any(dim % data.ndim == 0 for dim in dims):
+    if is_bootstrap and any(int(axis) % data.ndim == 0 for axis in dims):
         raise ValueError("cannot filter the BootstrapArray sample axis")
     if is_bootstrap and out is not None and not isinstance(out, BootstrapArray):
         raise TypeError("BootstrapArray input requires a BootstrapArray out")
@@ -120,16 +112,16 @@ def lfilter(
     if n_ops == 0:
         out[...] = data
     elif n_ops == 1:
-        dim = dims[0] % data.ndim
-        _lfilter_kernel(data, lambs[0] ** 2, dim, out)
+        axis = int(dims[0]) % data.ndim
+        _lfilter_kernel(data, float(lambs[0]) ** 2, axis, out)
     else:
         buf = np.empty_like(data, dtype=data.dtype)
         src = data
         dest = out if n_ops % 2 else buf
         for la in lambs:
-            for d in dims:
-                d = d % data.ndim
-                _lfilter_kernel(src, la**2, d, dest)
+            for axis in dims:
+                axis = int(axis) % data.ndim
+                _lfilter_kernel(src, float(la) ** 2, axis, dest)
                 src = dest
                 dest = buf if dest is out else out
     if is_bootstrap and not isinstance(out, BootstrapArray):
@@ -227,14 +219,9 @@ def lfilter_factor(
     lamb: float | Sequence[float] | npt.NDArray,
     e: float | Sequence[float] | npt.NDArray,
 ) -> np.floating | npt.NDArray:
-    if isinstance(lamb, np.ndarray) and lamb.ndim == 0:
-        lambs = [lamb.item()]
-    elif not isinstance(lamb, (Sequence, np.ndarray)):
-        lambs = [lamb]
-    else:
-        lambs = lamb
     energies = np.asarray(e)
-    lambs = np.asarray(lambs).reshape((-1,) + (1,) * energies.ndim)
+    lambs = np.atleast_1d(np.asarray(lamb, dtype=float))
+    lambs = lambs.reshape((-1,) + (1,) * energies.ndim)
     factor = np.prod(lambs**2 - lfilter_tilde(energies) ** 2, axis=0)
     if isinstance(e, BootstrapArray):
         return BootstrapArray(factor)

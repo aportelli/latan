@@ -145,7 +145,7 @@ def _momentum(momentum: Sequence[int]) -> str:
     return "_".join(str(item) for item in momentum)
 
 
-def _neg(momentum: Sequence[int]) -> tuple[int, int, int]:
+def _neg(momentum: Sequence[int]) -> tuple[int, ...]:
     return tuple(-item for item in momentum)  # type: ignore[return-value]
 
 

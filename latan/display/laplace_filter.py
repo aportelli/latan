@@ -6,7 +6,7 @@ import numpy.typing as npt
 from latan.display._common import (
     bootstrap_error_html,
     bootstrap_normality,
-    non_gaussian_attributes,
+    non_gaussian_html,
     normality_css,
     p_value_colour,
 )
@@ -17,6 +17,26 @@ if TYPE_CHECKING:
     from latan.physics.laplace_filter.spectrum import (
         LaplaceFilterEnergies,
     )
+
+
+def _spectrum_normality_html(
+    energy: float,
+    energy_lower: float,
+    energy_upper: float,
+    energy_non_gaussian: bool,
+    energy_p_value: float,
+    lamb: float,
+    lambda_lower: float,
+    lambda_upper: float,
+    lambda_non_gaussian: bool,
+    lambda_p_value: float,
+) -> tuple[str, str]:
+    errors = ()
+    if energy_non_gaussian:
+        errors += (("err_E", energy_upper - energy, energy - energy_lower),)
+    if lambda_non_gaussian:
+        errors += (("err_λ", lambda_upper - lamb, lamb - lambda_lower),)
+    return non_gaussian_html((energy_p_value, lambda_p_value), errors)
 
 
 def render_laplace_filter_energies_html[T: npt.NDArray](
@@ -38,9 +58,9 @@ def render_laplace_filter_energies_html[T: npt.NDArray](
         rows = "".join(
             "<tr>"
             f"<td>{i}</td><td>{energy:.4g}</td>"
-            f"{bootstrap_error_html(energy, error, energy_lo, energy_hi, e_ng)}"
+            f"{bootstrap_error_html(error)}"
             f"<td>{lamb:.4g}</td>"
-            f"{bootstrap_error_html(lamb, lamb_error, lambda_lo, lambda_hi, l_ng, non_gaussian_attributes((energy_p, lambda_p)))}"
+            f"{bootstrap_error_html(lamb_error, *_spectrum_normality_html(energy, energy_lo, energy_hi, e_ng, energy_p, lamb, lambda_lo, lambda_hi, l_ng, lambda_p))}"
             "</tr>"
             for i, (
                 energy,
@@ -73,7 +93,7 @@ def render_laplace_filter_energies_html[T: npt.NDArray](
             )
         )
         header = (
-            "<th>State</th><th>Energy</th><th>Error</th><th>Lambda</th><th>Error</th>"
+            "<th>State</th><th>Energy</th><th>Std</th><th>Lambda</th><th>Std</th>"
         )
     else:
         rows = "".join(
@@ -101,7 +121,7 @@ def render_laplace_filter_energies_html[T: npt.NDArray](
             <td colspan=\"2\" style=\"text-align:left\">CDR at minimum = {result.cdr:.2g} dB</td>
           </tr>
         </table>
-        <table style="margin-right:3em">
+        <table style="margin-right:16em">
           <tr>{header}</tr>
           {rows}
         </table>
@@ -125,17 +145,24 @@ def render_laplace_filter_amplitudes_html[T: npt.NDArray](
             f"<td>A<sub>{','.join(str(i) for i in index)}</sub></td>"
             f"<td>{float(amplitudes[index]):.4g}</td>"
             + bootstrap_error_html(
-                float(amplitudes[index]),
                 float(errors[index]),
-                float(lower[index]),
-                float(upper[index]),
-                bool(non_gaussian[index]),
-                non_gaussian_attributes(normality_p[index]),
+                *non_gaussian_html(
+                    normality_p[index],
+                    (
+                        (
+                            "err",
+                            float(upper[index] - amplitudes[index]),
+                            float(amplitudes[index] - lower[index]),
+                        ),
+                    )
+                    if non_gaussian[index]
+                    else (),
+                ),
             )
             + "</tr>"
             for index in np.ndindex(amplitudes.shape)
         )
-        header = "<th>Amplitude</th><th>Value</th><th>Error</th>"
+        header = "<th>Amplitude</th><th>Value</th><th>Std</th>"
     else:
         amplitudes = result.amplitudes
         rows = "".join(
@@ -166,7 +193,7 @@ def render_laplace_filter_amplitudes_html[T: npt.NDArray](
             <td colspan=\"2\" style=\"text-align:left\">CDR at minimum = {result.cdr:.2g} dB</td>
           </tr>
         </table>
-        <table style="margin-right:3em">
+        <table style="margin-right:16em">
           <tr>{header}</tr>
           {rows}
         </table>

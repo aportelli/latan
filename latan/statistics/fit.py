@@ -11,6 +11,13 @@ from iminuit import Minuit
 from scipy import stats
 from scipy.optimize import least_squares
 
+from latan.display._common import (
+    asymmetric_error_text,
+    bootstrap_error_text,
+    bootstrap_normality,
+    non_gaussian_text,
+    normality_significance,
+)
 from latan.display.fit_result import render_fit_result_html
 from latan.statistics.bootstrap import BootstrapArray
 from latan.statistics.chi2 import Chi2, PointRanges
@@ -53,21 +60,35 @@ class FitResult[T: npt.NDArray]:
         return tuple(f"p_{i}" for i in range(self.n_model_parameters))
 
     def __repr__(self) -> str:
-        msg = ""
+        msg = "Fit summary\n"
         if isinstance(self.parameters, BootstrapArray):
             mean = self.parameters.central
             err = self.parameters.error()
-            for name, value, error in zip(self._display_parameter_names, mean, err):
-                msg += f"{name} = {value:.4g} ± {error:.4g}\n"
+            lower, upper, non_gaussian, normality_p = bootstrap_normality(
+                self.parameters
+            )
+            for name, value, error, lo, hi, ng, p_value in zip(
+                self._display_parameter_names,
+                mean,
+                err,
+                lower,
+                upper,
+                non_gaussian,
+                normality_p,
+            ):
+                msg += (
+                    f"{name} = {bootstrap_error_text(value, error)}"
+                    f"{non_gaussian_text(p_value, errors=(asymmetric_error_text(value, lo, hi),) if ng else ())}\n"
+                )
         else:
             for name, value in zip(self._display_parameter_names, self.parameters):
                 msg += f"{name} = {value:.4g}\n"
         if self.parameters.shape[-1] > self.n_model_parameters:
             n_latent = self.parameters.shape[-1] - self.n_model_parameters
-            msg += f"({n_latent} latent parameters hidden)"
+            msg += f"({n_latent} latent parameters hidden)\n"
         msg += f"chi^2/dof = {self.chi2:.4g}/{self.dof} = {self.chi2 / self.dof:.2g}\n"
-        msg += f"  p-value = {self.p_value:.2g}\n"
-        msg += f"CDR at minimum {self.cdr:.2g} dB"
+        msg += f"p = {self.p_value:.2g} ({normality_significance(self.p_value):.2g}σ)\n"
+        msg += f"CDR at minimum = {self.cdr:.2g} dB"
         return msg
 
     def _repr_html_(self) -> str:

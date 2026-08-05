@@ -4,6 +4,7 @@ import numpy as np
 import numpy.typing as npt
 from scipy import stats
 
+from latan.display._common import non_gaussian_text
 from latan.display.normality import render_normality_html
 from latan.statistics.bootstrap import BootstrapArray
 
@@ -32,13 +33,53 @@ class NormalityTest:
         return not self.observable_shape
 
     def __repr__(self) -> str:
-        return (
-            f"Componentwise normality diagnostic: {self.n_samples} samples\n"
-            f"skewness = {np.array2string(self.skewness, precision=4)}\n"
-            f"excess kurtosis = {np.array2string(self.kurtosis_excess, precision=4)}\n"
-            f"D'Agostino-Pearson K^2 / 2 = {np.array2string(self.reduced_statistic, precision=4)}\n"
-            f"p-value = {np.array2string(self.p_value, precision=4)}"
+        labels = (
+            ["Value"]
+            if self.is_scalar
+            else [
+                "[" + ", ".join(str(i) for i in index) + "]"
+                for index in np.ndindex(self.observable_shape)
+            ]
         )
+        rows = [
+            (
+                label,
+                f"{skewness:.4g}",
+                f"{kurtosis:.4g}",
+                f"{statistic:.4g}",
+                non_gaussian_text(p_value, sigma=True),
+            )
+            for label, skewness, kurtosis, statistic, p_value in zip(
+                labels,
+                self.skewness.ravel(),
+                self.kurtosis_excess.ravel(),
+                self.reduced_statistic.ravel(),
+                self.p_value.ravel(),
+            )
+        ]
+        headers = ("Component", "Skewness", "Excess kurtosis", "K^2 / 2")
+        widths = [
+            max(len(header), *(len(row[i]) for row in rows))
+            for i, header in enumerate(headers)
+        ]
+        title = "Normality diagnostic" if self.is_scalar else "Componentwise normality diagnostic"
+        header = "  ".join(
+            [
+                f"{headers[0]:<{widths[0]}}",
+                *(f"{item:>{width}}" for item, width in zip(headers[1:], widths[1:])),
+            ]
+        )
+        body = "\n".join(
+            "  ".join(
+                [
+                    f"{row[0]:<{widths[0]}}",
+                    *(f"{item:>{width}}" for item, width in zip(row[1:4], widths[1:])),
+                ]
+            )
+            + row[4]
+            for row in rows
+        )
+        return f"{title}: {self.n_samples} samples\n{header}\n{body}"
 
     def _repr_html_(self) -> str:
         return render_normality_html(self)

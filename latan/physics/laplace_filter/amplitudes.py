@@ -5,11 +5,17 @@ import numpy as np
 import numpy.typing as npt
 from scipy import stats
 
+from latan.display._common import (
+    asymmetric_error_text,
+    bootstrap_error_text,
+    bootstrap_normality,
+    non_gaussian_text,
+    normality_significance,
+)
 from latan.display.laplace_filter import render_laplace_filter_amplitudes_html
 from latan.physics.laplace_filter.filter import (
     lfilter,
     lfilter_correlated_data,
-    lfilter_factor,
     lfilter_tilde_inv,
 )
 from latan.statistics.bootstrap import BootstrapArray
@@ -27,13 +33,19 @@ class LaplaceFilterAmplitudes[T: npt.NDArray]:
     cdr: float
 
     def __repr__(self) -> str:
-        msg = ""
+        msg = "Laplace-filter amplitudes\n"
         if isinstance(self.amplitudes, BootstrapArray):
             amplitudes = self.amplitudes.central
             errors = self.amplitudes.error()
+            lower, upper, non_gaussian, normality_p = bootstrap_normality(
+                self.amplitudes
+            )
             for index in np.ndindex(amplitudes.shape):
                 label = "_".join(str(i) for i in index)
-                msg += f"A_{label} = {amplitudes[index]:.4g} ± {errors[index]:.4g}\n"
+                msg += (
+                    f"A_{label} = {bootstrap_error_text(amplitudes[index], errors[index])}"
+                    f"{non_gaussian_text(normality_p[index], errors=(asymmetric_error_text(amplitudes[index], lower[index], upper[index]),) if non_gaussian[index] else ())}\n"
+                )
         else:
             for index in np.ndindex(self.amplitudes.shape):
                 label = "_".join(str(i) for i in index)
@@ -41,8 +53,8 @@ class LaplaceFilterAmplitudes[T: npt.NDArray]:
         ranges = ", ".join(f"[{start}, {stop})" for start, stop in self.ranges)
         msg += f"time range = {ranges}\n"
         msg += f"chi^2/dof = {self.chi2:.4g}/{self.dof} = {self.chi2 / self.dof:.2g}\n"
-        msg += f"  p-value = {self.p_value:.2g}\n"
-        msg += f"CDR at minimum {self.cdr:.2g} dB"
+        msg += f"p = {self.p_value:.2g} ({normality_significance(self.p_value):.2g}σ)\n"
+        msg += f"CDR at minimum = {self.cdr:.2g} dB"
         return msg
 
     def _repr_html_(self) -> str:
@@ -84,8 +96,8 @@ def lfilter_amplitudes(
     Each quantity has one amplitude per supplied regulator. Bootstrap data
     are fitted in one batched linear solve with the central covariance fixed.
     An optional Laplace filter regulator can be provided to improve the conditioning
-    of the correlation matrix. If provided, the resulting amplitudes are corrected to
-    fit the unfiltered data.
+    of the correlation matrix. If provided, the spectral basis is filtered too, so
+    the fitted amplitudes still refer to the unfiltered data.
 
     When `time_period` is provided, the regression basis includes the backward
     propagator appropriate for periodic time boundaries.
