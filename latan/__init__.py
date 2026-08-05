@@ -26,6 +26,7 @@ from latan.statistics import (
     FitResult,
     Model,
     NonparametricBootstrap,
+    NormalityTest,
     ParametricGaussianBootstrap,
     XYData,
     cdr,
@@ -38,6 +39,7 @@ from latan.statistics import (
     fit,
     gaussian_sample,
     make_correlated_data,
+    normality_test,
 )
 
 __all__ = [
@@ -52,6 +54,7 @@ __all__ = [
     "LaplaceFilteredT2",
     "Model",
     "NonparametricBootstrap",
+    "NormalityTest",
     "ParametricGaussianBootstrap",
     "XYData",
     "cdr",
@@ -77,4 +80,5 @@ __all__ = [
     "lfilter_tilde",
     "lfilter_tilde_inv",
     "make_correlated_data",
+    "normality_test",
 ]

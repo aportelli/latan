@@ -3,7 +3,13 @@ from typing import TYPE_CHECKING
 import numpy as np
 import numpy.typing as npt
 
-from latan.display._common import p_value_colour
+from latan.display._common import (
+    bootstrap_error_html,
+    bootstrap_normality,
+    non_gaussian_attributes,
+    normality_css,
+    p_value_colour,
+)
 from latan.statistics.bootstrap import BootstrapArray
 
 if TYPE_CHECKING:
@@ -23,23 +29,51 @@ def render_laplace_filter_energies_html[T: npt.NDArray](
 
     if isinstance(result.energies, BootstrapArray):
         assert isinstance(result.lambdas, BootstrapArray)
+        energy_lower, energy_upper, energy_ng, energy_normality_p = bootstrap_normality(
+            result.energies
+        )
+        lambda_lower, lambda_upper, lambda_ng, lambda_normality_p = bootstrap_normality(
+            result.lambdas
+        )
         rows = "".join(
             "<tr>"
-            f"<td>{i}</td><td>{energy:.4g}</td><td>{error:.4g}</td>"
-            f"<td>{lamb:.4g}</td><td>{lamb_error:.4g}</td>"
+            f"<td>{i}</td><td>{energy:.4g}</td>"
+            f"{bootstrap_error_html(energy, error, energy_lo, energy_hi, e_ng)}"
+            f"<td>{lamb:.4g}</td>"
+            f"{bootstrap_error_html(lamb, lamb_error, lambda_lo, lambda_hi, l_ng, non_gaussian_attributes((energy_p, lambda_p)))}"
             "</tr>"
-            for i, (energy, error, lamb, lamb_error) in enumerate(
+            for i, (
+                energy,
+                error,
+                lamb,
+                lamb_error,
+                energy_lo,
+                energy_hi,
+                e_ng,
+                energy_p,
+                lambda_lo,
+                lambda_hi,
+                l_ng,
+                lambda_p,
+            ) in enumerate(
                 zip(
                     result.energies.central,
                     result.energies.error(),
                     result.lambdas.central,
                     result.lambdas.error(),
+                    energy_lower,
+                    energy_upper,
+                    energy_ng,
+                    energy_normality_p,
+                    lambda_lower,
+                    lambda_upper,
+                    lambda_ng,
+                    lambda_normality_p,
                 )
             )
         )
         header = (
-            "<th>State</th><th>Energy</th><th>Error</th>"
-            "<th>Lambda</th><th>Error</th>"
+            "<th>State</th><th>Energy</th><th>Error</th><th>Lambda</th><th>Error</th>"
         )
     else:
         rows = "".join(
@@ -49,6 +83,7 @@ def render_laplace_filter_energies_html[T: npt.NDArray](
         header = "<th>State</th><th>Energy</th><th>Lambda</th>"
 
     return f"""
+        {normality_css()}
         <table>
           <tr><th colspan=\"2\" style=\"text-align:center\">Laplace-filter spectrum</th></tr>
           <tr>
@@ -66,7 +101,7 @@ def render_laplace_filter_energies_html[T: npt.NDArray](
             <td colspan=\"2\" style=\"text-align:left\">CDR at minimum = {result.cdr:.2g} dB</td>
           </tr>
         </table>
-        <table>
+        <table style="margin-right:3em">
           <tr>{header}</tr>
           {rows}
         </table>
@@ -81,29 +116,39 @@ def render_laplace_filter_amplitudes_html[T: npt.NDArray](
     significance, colour = p_value_colour(p_value)
     ranges = ", ".join(f"[{start}, {stop})" for start, stop in result.ranges)
 
-    amplitudes = (
-        result.amplitudes.central
-        if isinstance(result.amplitudes, BootstrapArray)
-        else result.amplitudes
-    )
-    errors = (
-        result.amplitudes.error()
-        if isinstance(result.amplitudes, BootstrapArray)
-        else None
-    )
-    rows = "".join(
-        "<tr>"
-        f"<td>A<sub>{','.join(str(i) for i in index)}</sub></td>"
-        f"<td>{amplitudes[index]:.4g}</td>"
-        + (f"<td>{errors[index]:.4g}</td>" if errors is not None else "")
-        + "</tr>"
-        for index in np.ndindex(amplitudes.shape)
-    )
-    header = "<th>Amplitude</th><th>Value</th>"
-    if errors is not None:
-        header += "<th>Error</th>"
+    if isinstance(result.amplitudes, BootstrapArray):
+        amplitudes = result.amplitudes.central
+        errors = result.amplitudes.error()
+        lower, upper, non_gaussian, normality_p = bootstrap_normality(result.amplitudes)
+        rows = "".join(
+            "<tr>"
+            f"<td>A<sub>{','.join(str(i) for i in index)}</sub></td>"
+            f"<td>{float(amplitudes[index]):.4g}</td>"
+            + bootstrap_error_html(
+                float(amplitudes[index]),
+                float(errors[index]),
+                float(lower[index]),
+                float(upper[index]),
+                bool(non_gaussian[index]),
+                non_gaussian_attributes(normality_p[index]),
+            )
+            + "</tr>"
+            for index in np.ndindex(amplitudes.shape)
+        )
+        header = "<th>Amplitude</th><th>Value</th><th>Error</th>"
+    else:
+        amplitudes = result.amplitudes
+        rows = "".join(
+            "<tr>"
+            f"<td>A<sub>{','.join(str(i) for i in index)}</sub></td>"
+            f"<td>{float(amplitudes[index]):.4g}</td>"
+            "</tr>"
+            for index in np.ndindex(amplitudes.shape)
+        )
+        header = "<th>Amplitude</th><th>Value</th>"
 
     return f"""
+        {normality_css()}
         <table>
           <tr><th colspan=\"2\" style=\"text-align:center\">Laplace-filter amplitudes</th></tr>
           <tr>
@@ -121,7 +166,7 @@ def render_laplace_filter_amplitudes_html[T: npt.NDArray](
             <td colspan=\"2\" style=\"text-align:left\">CDR at minimum = {result.cdr:.2g} dB</td>
           </tr>
         </table>
-        <table>
+        <table style="margin-right:3em">
           <tr>{header}</tr>
           {rows}
         </table>

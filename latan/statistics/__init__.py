@@ -30,6 +30,10 @@ from latan.statistics.gaussian_rng import (
 from latan.statistics.model import (
     Model,
 )
+from latan.statistics.normality import (
+    NormalityTest,
+    normality_test,
+)
 from latan.statistics.xy_data import (
     XYData,
 )
@@ -42,6 +46,7 @@ __all__ = [
     "FitResult",
     "Model",
     "NonparametricBootstrap",
+    "NormalityTest",
     "ParametricGaussianBootstrap",
     "XYData",
     "cdr",
@@ -54,4 +59,5 @@ __all__ = [
     "fit",
     "gaussian_sample",
     "make_correlated_data",
+    "normality_test",
 ]

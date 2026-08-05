@@ -3,7 +3,13 @@ from typing import TYPE_CHECKING
 
 import numpy.typing as npt
 
-from latan.display._common import p_value_colour
+from latan.display._common import (
+    bootstrap_error_html,
+    bootstrap_normality,
+    non_gaussian_attributes,
+    normality_css,
+    p_value_colour,
+)
 from latan.statistics.bootstrap import BootstrapArray
 
 if TYPE_CHECKING:
@@ -18,13 +24,24 @@ def render_fit_result_html[T: npt.NDArray](result: "FitResult[T]") -> str:
     if isinstance(result.parameters, BootstrapArray):
         mean = result.parameters.central
         err = result.parameters.error()
+        lower, upper, non_gaussian, normality_p = bootstrap_normality(
+            result.parameters
+        )
         parameter_rows = "".join(
             "<tr>"
             f"<td>{escape(name)}</td>"
             f"<td>{value:.4g}</td>"
-            f"<td>{error:.4g}</td>"
+            f"{bootstrap_error_html(value, error, lo, hi, ng, non_gaussian_attributes(normal_p))}"
             "</tr>"
-            for name, value, error in zip(result._display_parameter_names, mean, err)
+            for name, value, error, lo, hi, ng, normal_p in zip(
+                result._display_parameter_names,
+                mean,
+                err,
+                lower,
+                upper,
+                non_gaussian,
+                normality_p,
+            )
         )
         parameter_header = "<th>Name</th><th>Value</th><th>Error</th>"
     else:
@@ -41,6 +58,7 @@ def render_fit_result_html[T: npt.NDArray](result: "FitResult[T]") -> str:
         else ""
     )
     return f"""
+        {normality_css()}
         <table>
           <tr><th colspan=\"2\" style=\"text-align:center\">Fit summary</th></tr>
           <tr>
@@ -55,7 +73,7 @@ def render_fit_result_html[T: npt.NDArray](result: "FitResult[T]") -> str:
             <td colspan=\"2\" style=\"text-align:left\">CDR at minimum = {result.cdr:.2g} dB</td>
           </tr>
         </table>
-        <table>
+        <table style="margin-right:3em">
           <tr>{parameter_header}</tr>
           {parameter_rows}
         </table>
