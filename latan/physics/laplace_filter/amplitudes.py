@@ -145,20 +145,24 @@ def lfilter_amplitudes(
     if dof <= 0:
         raise ValueError(f"non-positive degrees of freedom ({dof})")
 
-    # build Laplace transform matrix
+    # build exponential design matrix
     #
     # L_ti = exp(-E_i*t) + exp(-E_i*(T-t)) for periodic time boundaries
     #
     # if several quantities are present, L is extended as a block-diagonal matrix for
-    # every time range.
+    # every time range. If amplitude_lambda is provided, L gets filtered to generate
+    # the amplitude correction factor.
     lmat = np.zeros((*energies.shape[:-1], n_points, n_amplitudes))
     offset = 0
     for quantity, (start, stop) in enumerate(ranges):
-        time = np.arange(start, stop)
+        time = np.arange(cdata.mean(quantity).size)
         block = np.exp(-energies[..., :, None] * time)
         if time_period is not None:
             block += np.exp(-energies[..., :, None] * (time_period - time))
-        size = time.size
+        if amplitude_lambda is not None:
+            block = lfilter(block, amplitude_lambda, dim=-1)
+        block = block[..., start:stop]
+        size = stop - start
         lmat[
             ...,
             offset : offset + size,
@@ -166,7 +170,7 @@ def lfilter_amplitudes(
         ] = np.swapaxes(block, -1, -2)
         offset += size
 
-    # linear regression for the (potentially filtered) amplitudes
+    # linear regression for the unfiltered amplitudes
     #
     # B = (L^T * V^-1 * L)^-1 * (L^T * V^-1 * y)
     #
@@ -178,24 +182,16 @@ def lfilter_amplitudes(
     lmat_vinv_lmat = lmat_t @ np.swapaxes(vinv_lmat, -1, -2)
     vinv_y = cov_inverse_multiply(y, cov)
     rhs = lmat_t @ vinv_y[..., None]
-    filtered_amplitudes = np.linalg.solve(lmat_vinv_lmat, rhs).squeeze(-1)
+    amplitudes = np.linalg.solve(lmat_vinv_lmat, rhs).squeeze(-1)
 
     central_lmat = lmat[0] if lmat.ndim == 3 else lmat
     central_y = y[0] if y.ndim == 2 else y
-    central_amplitudes = (
-        filtered_amplitudes[0] if filtered_amplitudes.ndim == 2 else filtered_amplitudes
-    )
+    central_amplitudes = amplitudes[0] if amplitudes.ndim == 2 else amplitudes
     residual = central_y - central_lmat @ central_amplitudes
     chi2 = float(cov_quadratic_form(residual, cov))
 
-    # package final result, if the optional amplitude_lambda regulator was provided,
-    # amplitudes are corrected by a factor 1 / (amplitude_lambda^2 - Etilde_i^2)
-    # with Etilde_i^2 = 2.0 * [cosh(E_i) - 1.0] (cf. lfilter_tilde)
-    shape = (*filtered_amplitudes.shape[:-1], n_quantities, n_states)
-    amplitudes = filtered_amplitudes.reshape(shape)
-    if amplitude_lambda is not None:
-        factor = np.asarray(lfilter_factor(amplitude_lambda, energies))
-        amplitudes /= factor[..., None, :]
+    shape = (*amplitudes.shape[:-1], n_quantities, n_states)
+    amplitudes = amplitudes.reshape(shape)
     if n_quantities == 1:
         amplitudes = amplitudes[..., 0, :]
     if n_bootstrap is not None:
