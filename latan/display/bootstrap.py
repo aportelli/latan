@@ -1,0 +1,113 @@
+from html import escape
+
+import numpy as np
+
+from latan.display._common import (
+    _component_labels,
+    asymmetric_error_text,
+    bootstrap_error_html,
+    bootstrap_normality,
+    non_gaussian_html,
+    non_gaussian_text,
+    normality_css,
+)
+from latan.statistics.bootstrap import BootstrapArray
+
+
+def _normality(
+    data: BootstrapArray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None:
+    if data.samples.shape[0] < 8 or not np.isrealobj(data):
+        return None
+    return bootstrap_normality(data)
+
+
+def render_bootstrap_array_text(data: BootstrapArray) -> str:
+    """Render a plain-text BootstrapArray summary."""
+    central = np.asarray(data.central)
+    error = np.asarray(data.error())
+    normality = _normality(data)
+    rows = []
+    values = central.ravel()
+    errors = error.ravel()
+    labels = _component_labels(central.shape)
+    if normality is None:
+        annotations = ("",) * values.size
+    else:
+        lower, upper, non_gaussian, p_value = normality
+        annotations = tuple(
+            non_gaussian_text(
+                p,
+                errors=(asymmetric_error_text(value, lo, hi),) if ng else (),
+            )
+            for value, lo, hi, ng, p in zip(
+                values,
+                lower.ravel(),
+                upper.ravel(),
+                non_gaussian.ravel(),
+                p_value.ravel(),
+            )
+        )
+    for label, value, std, annotation in zip(labels, values, errors, annotations):
+        rows.append((label, f"{value:.4g}", f"{std:.4g}{annotation}"))
+
+    headers = ("Component", "Value", "Std")
+    widths = [
+        max(len(header), *(len(row[index]) for row in rows))
+        for index, header in enumerate(headers)
+    ]
+    header = "  ".join(
+        (f"{headers[0]:<{widths[0]}}", *(f"{item:>{width}}" for item, width in zip(headers[1:], widths[1:])))
+    )
+    body = "\n".join(
+        "  ".join(
+            (f"{row[0]:<{widths[0]}}", *(f"{item:>{width}}" for item, width in zip(row[1:], widths[1:])))
+        )
+        for row in rows
+    )
+    return f"Bootstrap array: {data.samples.shape[0]} samples\n{header}\n{body}"
+
+
+def render_bootstrap_array_html(data: BootstrapArray) -> str:
+    """Render a compact BootstrapArray summary in Jupyter notebooks."""
+    central = np.asarray(data.central)
+    error = np.asarray(data.error())
+    normality = _normality(data)
+    values = central.ravel()
+    errors = error.ravel()
+    labels = _component_labels(central.shape)
+    if normality is None:
+        normality_values = (None,) * values.size
+    else:
+        lower, upper, non_gaussian, p_value = normality
+        normality_values = zip(
+            lower.ravel(), upper.ravel(), non_gaussian.ravel(), p_value.ravel()
+        )
+
+    rows = ""
+    for label, value, std, diagnostic in zip(labels, values, errors, normality_values):
+        if diagnostic is None:
+            attributes, annotation = "", ""
+        else:
+            lower, upper, non_gaussian, p_value = diagnostic
+            asymmetry = (
+                (("err", float(upper - value), float(value - lower)),)
+                if non_gaussian
+                else ()
+            )
+            attributes, annotation = non_gaussian_html(p_value, asymmetry)
+        rows += (
+            "<tr>"
+            f"<td>{escape(label)}</td>"
+            f"<td>{value:.4g}</td>"
+            f"{bootstrap_error_html(float(std), attributes, annotation)}"
+            "</tr>"
+        )
+    return f"""
+        {normality_css()}
+        <table style="margin-right:16em">
+          <tr><th colspan="3" style="text-align:center">Bootstrap array: {data.samples.shape[0]} samples</th></tr>
+          <tr><th>Component</th><th>Value</th><th>Std</th></tr>
+          {rows}
+        </table>
+    """

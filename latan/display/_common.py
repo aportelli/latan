@@ -7,6 +7,15 @@ from latan.statistics.bootstrap import BootstrapArray
 NORMALITY_P_THRESHOLD = 2.0 * stats.norm.sf(2.0)
 
 
+def _component_labels(shape: tuple[int, ...]) -> list[str]:
+    if not shape:
+        return ["Value"]
+    return [
+        "[" + ", ".join(str(index) for index in np.unravel_index(i, shape)) + "]"
+        for i in range(int(np.prod(shape)))
+    ]
+
+
 def p_value_colour(p_value: float) -> tuple[float, str]:
     significance = normality_significance(p_value)
     if significance < 2:
@@ -31,6 +40,7 @@ def bootstrap_normality(
     lower, upper = np.quantile(
         data.samples, (stats.norm.cdf(-1.0), stats.norm.cdf(1.0)), axis=0
     )
+    lower, upper = np.asarray(lower), np.asarray(upper)
     p_value = np.asarray(test.p_value)
     non_gaussian = p_value < NORMALITY_P_THRESHOLD
     return lower, upper, non_gaussian, p_value

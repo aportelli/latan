@@ -19,6 +19,16 @@ class BootstrapArray(np.ndarray):
     def __array_finalize__(self, obj) -> None:
         pass
 
+    def __repr__(self) -> str:
+        from latan.display.bootstrap import render_bootstrap_array_text
+
+        return render_bootstrap_array_text(self)
+
+    def _repr_html_(self) -> str:
+        from latan.display.bootstrap import render_bootstrap_array_html
+
+        return render_bootstrap_array_html(self)
+
     @property
     def central(self) -> npt.NDArray:
         return np.asarray(self[0])

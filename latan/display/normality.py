@@ -7,20 +7,10 @@ import numpy as np
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 
-from latan.display._common import p_value_colour
+from latan.display._common import _component_labels, p_value_colour
 
 if TYPE_CHECKING:
     from latan.statistics.normality import NormalityTest
-
-
-def _component_labels(shape: tuple[int, ...]) -> list[str]:
-    if not shape:
-        return ["Value"]
-    return [
-        "[" + ", ".join(str(index) for index in np.unravel_index(i, shape)) + "]"
-        for i in range(int(np.prod(shape)))
-    ]
-
 
 def _qq_plot(result: "NormalityTest", labels: list[str], width: int) -> str:
     observed = result.qq_observed.reshape(result.n_samples, -1)
