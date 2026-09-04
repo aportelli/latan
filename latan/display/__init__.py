@@ -1,5 +1,7 @@
 from latan.display.bootstrap import (
+    render_bootstrap_array_compact_text,
     render_bootstrap_array_html,
+    render_bootstrap_array_paper_text,
     render_bootstrap_array_text,
 )
 from latan.display.fit_result import (
@@ -14,7 +16,9 @@ from latan.display.normality import (
 )
 
 __all__ = [
+    "render_bootstrap_array_compact_text",
     "render_bootstrap_array_html",
+    "render_bootstrap_array_paper_text",
     "render_bootstrap_array_text",
     "render_fit_result_html",
     "render_laplace_filter_amplitudes_html",

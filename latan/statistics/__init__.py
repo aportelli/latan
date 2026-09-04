@@ -9,7 +9,6 @@ from latan.statistics.chi2 import (
 )
 from latan.statistics.correlated_data import (
     CorrelatedData,
-    make_correlated_data,
 )
 from latan.statistics.correlation import (
     cdr,
@@ -58,6 +57,5 @@ __all__ = [
     "cov_to_corr",
     "fit",
     "gaussian_sample",
-    "make_correlated_data",
     "normality_test",
 ]

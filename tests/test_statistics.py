@@ -53,12 +53,12 @@ class TestStatistics(unittest.TestCase):
             latan.cov_quadratic_form(residual, covariance), expected
         )
 
-    def test_make_correlated_data(self) -> None:
+    def test_correlated_data_sample_constructors(self) -> None:
         primary = [
             np.array([[1.0, 2.0], [3.0, 1.0], [2.0, 4.0]]),
             np.array([[0.0], [2.0], [5.0]]),
         ]
-        primary_data = latan.make_correlated_data(primary)
+        primary_data = latan.CorrelatedData.from_samples(primary)
         primary_joint = np.concatenate(primary, axis=1)
         primary_covariance = np.cov(primary_joint, rowvar=False) / len(primary_joint)
         np.testing.assert_allclose(primary_data.mean(0), primary[0].mean(axis=0))
@@ -70,10 +70,21 @@ class TestStatistics(unittest.TestCase):
             ),
             latan.BootstrapArray(np.array([[2.0], [0.0], [2.0], [5.0]])),
         ]
-        bootstrap_data = latan.make_correlated_data(bootstrap)
+        bootstrap_data = latan.CorrelatedData.from_bootstrap(bootstrap)
         bootstrap_joint = np.concatenate([item.samples for item in bootstrap], axis=1)
         np.testing.assert_allclose(bootstrap_data.mean(0), bootstrap[0].central)
         np.testing.assert_allclose(bootstrap_data.mean(1), bootstrap[1].central)
         np.testing.assert_allclose(
             bootstrap_data.total_mean_cov()[1], np.cov(bootstrap_joint, rowvar=False)
         )
+        assert bootstrap_data.bootstrap is not None
+        self.assertEqual(len(bootstrap_data.bootstrap), 2)
+        self.assertIs(bootstrap_data.bootstrap[0], bootstrap[0])
+        self.assertIsNone(primary_data.bootstrap)
+
+        uncorrelated = bootstrap_data.uncorrelated()
+        assert uncorrelated.bootstrap is not None
+        self.assertIs(uncorrelated.bootstrap[1], bootstrap[1])
+
+        with self.assertRaisesRegex(TypeError, "only BootstrapArray"):
+            latan.CorrelatedData.from_bootstrap(np.ones((3, 2)))  # ty: ignore[invalid-argument-type]

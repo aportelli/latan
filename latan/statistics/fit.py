@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from functools import partial
-from typing import Literal, cast, overload
+from typing import Literal, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -146,17 +146,10 @@ def _fit_batch(
 # helper validating and extracting bootstrap samples
 def _bootstrap_samples(
     data: XYData,
-    bootstrap: BootstrapArray | Sequence[BootstrapArray],
 ) -> list[npt.NDArray]:
-    if isinstance(bootstrap, BootstrapArray):
-        bootstrap = [bootstrap]
-    else:
-        bootstrap = list(bootstrap)
-    if len(bootstrap) != data.data.n_quantities:
-        raise ValueError(
-            "number of bootstrap quantities and correlated-data quantities mismatch "
-            f"(got {len(bootstrap)}, expected {data.data.n_quantities})"
-        )
+    bootstrap = data.data.bootstrap
+    if bootstrap is None:
+        raise ValueError("data does not contain bootstrap replicas")
     n_samples = bootstrap[0].samples.shape[0]
     samples: list[npt.NDArray] = []
     for i, item in enumerate(bootstrap):
@@ -174,7 +167,6 @@ def _bootstrap_samples(
     return samples
 
 
-@overload
 def fit(
     data: XYData,
     model: Model,
@@ -182,36 +174,6 @@ def fit(
     *,
     include: PointRanges | None = None,
     exclude: PointRanges | None = None,
-    bootstrap: None = None,
-    ncall: int = 5000,
-    workers: int = 1,
-    covariance: Literal["full", "diagonal"] = "full",
-) -> FitResult[npt.NDArray]: ...
-
-
-@overload
-def fit(
-    data: XYData,
-    model: Model,
-    p0: npt.NDArray,
-    *,
-    include: PointRanges | None = None,
-    exclude: PointRanges | None = None,
-    bootstrap: BootstrapArray | Sequence[BootstrapArray],
-    ncall: int = 5000,
-    workers: int = 1,
-    covariance: Literal["full", "diagonal"] = "full",
-) -> FitResult[BootstrapArray]: ...
-
-
-def fit(
-    data: XYData,
-    model: Model,
-    p0: npt.NDArray,
-    *,
-    include: PointRanges | None = None,
-    exclude: PointRanges | None = None,
-    bootstrap: BootstrapArray | Sequence[BootstrapArray] | None = None,
     ncall: int = 5000,
     workers: int = 1,
     covariance: Literal["full", "diagonal"] = "full",
@@ -219,17 +181,17 @@ def fit(
     """Fit a model to correlated x/y data.
 
     A cheap uncorrelated fit with observed x values fixed preconditions the
-    requested fit. When bootstrap samples are supplied, the central covariance
-    remains fixed while every aligned sample is fitted.
+    requested fit. When `data` retains bootstrap replicas, the central
+    covariance remains fixed while every aligned sample is fitted.
 
     Args:
-        data: Pointwise x/y data and the fixed central covariance.
+        data: Pointwise x/y data, central covariance, and optional retained
+            bootstrap replicas.
         model: Model relating x coordinates to y coordinates.
         p0: Initial physical model parameters.
         include: One closed `(low, high)` value interval per x coordinate.
             Finite endpoints are included; `None` is unbounded.
         exclude: Closed coordinate intervals removed after `include`.
-        bootstrap: One bootstrap array per stochastic quantity in `data`.
         ncall: Maximum number of least-squares function evaluations.
         workers: Number of bootstrap worker processes.
         covariance: Use the full covariance matrix or only its diagonal.
@@ -278,11 +240,11 @@ def fit(
     )
 
     # if fit is not bootstrapped we are done
-    if bootstrap is None:
+    if data.data.bootstrap is None:
         return central_result
 
     # if bootstrapped do potentially parallel loop on bootstrap samples
-    samples = _bootstrap_samples(data, bootstrap)
+    samples = _bootstrap_samples(data)
     n_bootstrap = samples[0].shape[0]
     parameters = np.empty((n_bootstrap + 1, chi2.n_parameters))
     parameters[0] = central_parameters

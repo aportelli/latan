@@ -26,7 +26,7 @@ from latan.physics.laplace_filter.filter import (
 )
 from latan.physics.laplace_filter.t2 import LaplaceFilteredT2
 from latan.statistics.bootstrap import BootstrapArray
-from latan.statistics.correlated_data import CorrelatedData, make_correlated_data
+from latan.statistics.correlated_data import CorrelatedData
 from latan.statistics.correlation import cdr
 
 
@@ -300,7 +300,7 @@ def lfilter_spectrum(
     if workers < 1:
         raise ValueError("workers must be positive")
 
-    corr_data = make_correlated_data(data)
+    corr_data = CorrelatedData.from_bootstrap(data)
     n_bootstrap = data[0].samples.shape[0]
     lambdas = np.empty((n_bootstrap + 1, n_state))
     energies = np.empty_like(lambdas)

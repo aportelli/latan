@@ -77,6 +77,31 @@ class TestChi2(unittest.TestCase):
         np.testing.assert_allclose(result.model_parameters, expected, atol=1e-8)
         self.assertAlmostEqual(result.chi2, expected_chi2)
 
+    def test_bootstrap_fit_uses_data_replicas(self) -> None:
+        x = np.array([-2.0, -0.5, 0.0, 1.5, 3.0])
+        y = np.array([-1.1, 0.4, 0.9, 2.8, 5.4])
+        rng = np.random.default_rng(2468)
+        bootstrap = latan.BootstrapArray(
+            np.vstack((y, y + rng.normal(scale=0.05, size=(12, y.size))))
+        )
+        data = latan.XYData(
+            latan.CorrelatedData.from_bootstrap(bootstrap), x=[x], y_indices=[0]
+        )
+        model = latan.Model(
+            lambda values, parameters: parameters[..., 0]
+            + parameters[..., 1] * values[..., 0],
+            n_var=1,
+            n_par=2,
+        )
+
+        result = latan.fit(data, model, np.zeros(2))
+        self.assertIsInstance(result.parameters, latan.BootstrapArray)
+        self.assertEqual(result.parameters.shape, (13, 2))
+
+        data.data.set_means([y + 1.0])
+        with self.assertRaisesRegex(ValueError, "central value does not match data"):
+            latan.fit(data, model, np.zeros(2))
+
     def test_fit_inexact_x(self) -> None:
         x = np.linspace(-2.0, 2.0, 6)
         parameters = np.array([1.2, -0.7])

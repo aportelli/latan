@@ -159,6 +159,10 @@ def lfilter_correlated_data(
         lfilter(data.mean(i), lamb, out=out.mean(i))
         for j in range(i, data.n_quantities):
             lfilter(data.cov(i, j), lamb, dim=(0, 1), out=out.cov(i, j))
+    if data.bootstrap is None:
+        out._set_bootstrap(None)
+    else:
+        out._set_bootstrap([lfilter(item, lamb) for item in data.bootstrap])
     return out
 
 

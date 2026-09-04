@@ -5,6 +5,9 @@ from latan.physics.laplace_filter.amplitudes import (
 from latan.physics.laplace_filter.correlations import (
     lfilter_optimize_cdr,
 )
+from latan.physics.laplace_filter.excited import (
+    filter_excited,
+)
 from latan.physics.laplace_filter.filter import (
     lfilter,
     lfilter_correlated_data,
@@ -20,9 +23,6 @@ from latan.physics.laplace_filter.spectrum import (
     LaplaceFilterSpectrumTest,
     lfilter_spectrum,
     lfilter_spectrum_test,
-)
-from latan.physics.laplace_filter.excited import (
-    filter_excited,
 )
 from latan.physics.laplace_filter.t2 import (
     LaplaceFilteredT2,

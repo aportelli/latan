@@ -13,7 +13,7 @@ from latan.physics.laplace_filter.spectrum import (
     lfilter_spectrum_test,
 )
 from latan.statistics.bootstrap import BootstrapArray
-from latan.statistics.correlated_data import CorrelatedData, make_correlated_data
+from latan.statistics.correlated_data import CorrelatedData
 
 
 @overload
@@ -71,7 +71,7 @@ def lfilter_full_spectrum(
             )
         test_data = data
     else:
-        test_data = make_correlated_data(data)
+        test_data = CorrelatedData.from_bootstrap(data)
     fit_ti = -1
     for ti in range(tested_states + 1, tf - tested_states):
         test = lfilter_spectrum_test(

@@ -19,7 +19,7 @@ from latan.physics.laplace_filter.filter import (
     lfilter_tilde_inv,
 )
 from latan.statistics.bootstrap import BootstrapArray
-from latan.statistics.correlated_data import CorrelatedData, make_correlated_data
+from latan.statistics.correlated_data import CorrelatedData
 from latan.statistics.correlation import cdr, cov_inverse_multiply, cov_quadratic_form
 
 
@@ -126,7 +126,7 @@ def lfilter_amplitudes(
             data_f = [lfilter(b, amplitude_lambda) for b in data]
         else:
             data_f = data
-        cdata = make_correlated_data(data_f)
+        cdata = CorrelatedData.from_bootstrap(data_f)
         n_bootstrap = data_f[0].shape[0]
         if any(item.shape[0] != n_bootstrap for item in data_f):
             raise ValueError("bootstrap quantities have different sample counts")

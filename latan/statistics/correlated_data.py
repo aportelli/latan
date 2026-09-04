@@ -1,5 +1,4 @@
 from collections.abc import Sequence
-from typing import cast
 
 import numpy as np
 import numpy.typing as npt
@@ -38,6 +37,7 @@ class CorrelatedData:
 
     _means: list[npt.NDArray]
     _covs: list[list[npt.NDArray]]
+    _bootstrap: tuple[BootstrapArray, ...] | None
 
     def __init__(
         self,
@@ -105,6 +105,103 @@ class CorrelatedData:
                 )
         self._means = means_list
         self._covs = covs_list
+        self._bootstrap = None
+
+    def _set_bootstrap(self, bootstrap: Sequence[BootstrapArray] | None) -> None:
+        """Attach already-validated bootstrap replicas."""
+        self._bootstrap = None if bootstrap is None else tuple(bootstrap)
+
+    @classmethod
+    def _from_sample_arrays(
+        cls,
+        samples: list[npt.NDArray],
+        means: list[npt.NDArray],
+        *,
+        kind: str,
+        covariance_scale: float,
+    ) -> "CorrelatedData":
+        n_samples = samples[0].shape[0]
+        if n_samples < 2:
+            raise ValueError(f"at least two {kind} samples are required")
+        for i, (mean, sample) in enumerate(zip(means, samples)):
+            if mean.ndim != 1:
+                raise ValueError(
+                    f"{kind} datum {i} has a non-vector mean (ndim = {mean.ndim})"
+                )
+            if sample.ndim != 2:
+                raise ValueError(
+                    f"{kind} datum {i} has non-matrix samples (ndim = {sample.ndim})"
+                )
+            if sample.shape != (n_samples, mean.size):
+                raise ValueError(
+                    f"{kind} datum {i} has sample shape {sample.shape}, "
+                    f"expected ({n_samples}, {mean.size})"
+                )
+        joint_samples = np.concatenate(samples, axis=1)
+        joint_cov = (
+            np.atleast_2d(np.cov(joint_samples, rowvar=False)) * covariance_scale
+        )
+        bounds = np.cumsum([0, *(mean.size for mean in means)])
+        cov = [
+            [
+                joint_cov[bounds[i] : bounds[i + 1], bounds[j] : bounds[j + 1]]
+                for j in range(i, len(means))
+            ]
+            for i in range(len(means))
+        ]
+        return cls(means, cov)
+
+    @classmethod
+    def from_samples(
+        cls, data: list[npt.NDArray] | npt.NDArray
+    ) -> "CorrelatedData":
+        """Build correlated data from aligned primary samples.
+
+        A plain NumPy array must have shape `(n_samples, n_components)`, with
+        primary samples on axis 0. Each input must have the same number of
+        samples. The resulting covariance is the covariance of the mean.
+        """
+        if isinstance(data, np.ndarray):
+            data = [data]
+        if not data:
+            raise ValueError("data list is empty")
+        if not all(type(datum) is np.ndarray for datum in data):
+            raise TypeError("data must contain only plain numpy.ndarray")
+        samples = data
+        return cls._from_sample_arrays(
+            samples,
+            [sample.mean(axis=0) for sample in samples],
+            kind="primary",
+            covariance_scale=1.0 / samples[0].shape[0],
+        )
+
+    @classmethod
+    def from_bootstrap(
+        cls, data: list[BootstrapArray] | BootstrapArray
+    ) -> "CorrelatedData":
+        """Build correlated data from aligned bootstrap quantities.
+
+        A `BootstrapArray` supplies the central mean and aligned replicas.
+        The resulting covariance is the covariance of the replicas, which are
+        retained for automatic bootstrap fits.
+        """
+        if isinstance(data, BootstrapArray):
+            data = [data]
+        elif isinstance(data, np.ndarray):
+            raise TypeError("data must contain only BootstrapArray")
+        if not data:
+            raise ValueError("data list is empty")
+        if not all(isinstance(datum, BootstrapArray) for datum in data):
+            raise TypeError("data must contain only BootstrapArray")
+        bootstrap = tuple(data)
+        correlated = cls._from_sample_arrays(
+            [item.samples for item in bootstrap],
+            [item.central for item in bootstrap],
+            kind="bootstrap",
+            covariance_scale=1.0,
+        )
+        correlated._set_bootstrap(bootstrap)
+        return correlated
 
     def _cov_block(self, i: int, j: int) -> npt.NDArray:
         if i <= j:
@@ -145,6 +242,11 @@ class CorrelatedData:
     def covs(self) -> list[list[npt.NDArray]]:
         return self._covs
 
+    @property
+    def bootstrap(self) -> tuple[BootstrapArray, ...] | None:
+        """Aligned bootstrap replicas, if this data was built from them."""
+        return self._bootstrap
+
     def uncorrelated(self) -> "CorrelatedData":
         cov = [
             [
@@ -155,7 +257,10 @@ class CorrelatedData:
             ]
             for i in range(self.n_quantities)
         ]
-        return CorrelatedData(self._means, cov)
+        data = CorrelatedData(self._means, cov)
+        if self._bootstrap is not None:
+            data._set_bootstrap(self._bootstrap)
+        return data
 
     def size(self, index: int) -> int:
         self._validate_index(index)
@@ -250,75 +355,3 @@ class CorrelatedData:
                 for row, i in enumerate(quantities)
             ])
         return mean, cov
-
-
-def make_correlated_data(
-    data: list[BootstrapArray] | list[npt.NDArray] | BootstrapArray | npt.NDArray,
-) -> CorrelatedData:
-    """Build correlated data from aligned bootstrap or primary samples.
-
-    The covariance retains correlations between every supplied quantity. For
-    primary samples, the covariance of the mean is used. For bootstrap data,
-    the stored central value is used as the mean and the bootstrap samples
-    define the covariance.
-
-    Args:
-        data: One `BootstrapArray` or NumPy array, or a non-empty list of
-            arrays of the same kind. A plain NumPy array must have shape
-            `(n_samples, n_components)`, with primary samples on axis 0.
-            Every input must have the same number of samples. A
-            `BootstrapArray` supplies its central value and aligned bootstrap
-            samples.
-
-    Returns:
-        A `CorrelatedData` instance with one quantity per input array.
-    """
-    if isinstance(data, np.ndarray):
-        data = [data]
-    if not data:
-        raise ValueError("data list is empty")
-
-    if all(isinstance(datum, BootstrapArray) for datum in data):
-        bootstrap_data = cast(list[BootstrapArray], data)
-        samples = [bootstrap.samples for bootstrap in bootstrap_data]
-        means = [bootstrap.central for bootstrap in bootstrap_data]
-        kind = "bootstrap"
-        covariance_scale = 1.0
-    elif all(type(datum) is np.ndarray for datum in data):
-        samples = data
-        means = [sample.mean(axis=0) for sample in samples]
-        kind = "primary"
-        covariance_scale = 1.0 / samples[0].shape[0]
-    else:
-        raise TypeError(
-            "data must contain only BootstrapArray or only plain numpy.ndarray"
-        )
-
-    n_samples = samples[0].shape[0]
-    if n_samples < 2:
-        raise ValueError(f"at least two {kind} samples are required")
-    for i, (m, s) in enumerate(zip(means, samples)):
-        if m.ndim != 1:
-            raise ValueError(
-                f"{kind} datum {i} has a non-vector mean (ndim = {m.ndim})"
-            )
-        if s.ndim != 2:
-            raise ValueError(
-                f"{kind} datum {i} has non-matrix samples (ndim = {s.ndim})"
-            )
-        if s.shape != (n_samples, m.size):
-            raise ValueError(
-                f"{kind} datum {i} has sample shape {s.shape}, "
-                f"expected ({n_samples}, {m.size})"
-            )
-    joint_samples = np.concatenate(samples, axis=1)
-    joint_cov = np.atleast_2d(np.cov(joint_samples, rowvar=False)) * covariance_scale
-    bounds = np.cumsum([0, *(mean.size for mean in means)])
-    cov = [
-        [
-            joint_cov[bounds[i] : bounds[i + 1], bounds[j] : bounds[j + 1]]
-            for j in range(i, len(means))
-        ]
-        for i in range(len(means))
-    ]
-    return CorrelatedData(means, cov)

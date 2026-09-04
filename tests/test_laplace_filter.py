@@ -54,7 +54,7 @@ class TestLaplaceFilter(unittest.TestCase):
             latan.lfilter(np.asarray(bootstrap), lamb, dim=-1),
         )
         np.testing.assert_allclose(
-            latan.make_correlated_data(filtered).mean(), filtered.central
+            latan.CorrelatedData.from_bootstrap(filtered).mean(), filtered.central
         )
         out = latan.BootstrapArray(np.empty_like(bootstrap))
         self.assertIs(latan.lfilter(bootstrap, lamb, dim=-1, out=out), out)
@@ -122,6 +122,20 @@ class TestLaplaceFilter(unittest.TestCase):
                 expected = latan.lfilter(data.cov(i, j), lamb, dim=(0, 1))
                 np.testing.assert_allclose(filtered.cov(i, j), expected)
                 np.testing.assert_allclose(out.cov(i, j), expected)
+
+    def test_laplace_filter_correlated_data_preserves_bootstrap(self) -> None:
+        rng = np.random.default_rng(22)
+        bootstrap = latan.BootstrapArray(rng.normal(size=(17, 8)))
+        data = latan.CorrelatedData.from_bootstrap(bootstrap)
+        lamb = np.array([0.4, 0.7])
+
+        filtered = latan.lfilter_correlated_data(data, lamb)
+        assert filtered.bootstrap is not None
+        np.testing.assert_allclose(filtered.bootstrap[0], latan.lfilter(bootstrap, lamb))
+
+        plain = latan.CorrelatedData(np.arange(8.0), np.eye(8))
+        self.assertIs(latan.lfilter_correlated_data(plain, lamb, out=filtered), filtered)
+        self.assertIsNone(filtered.bootstrap)
 
     def test_laplace_filter_t2_single(self) -> None:
         rng = np.random.default_rng(2)
