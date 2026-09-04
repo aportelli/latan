@@ -19,10 +19,27 @@ class BootstrapArray(np.ndarray):
     def __array_finalize__(self, obj) -> None:
         pass
 
-    def __repr__(self) -> str:
-        from latan.display.bootstrap import render_bootstrap_array_text
+    def __str__(self) -> str:
+        from latan.display.bootstrap import render_bootstrap_array_paper_text
 
-        return render_bootstrap_array_text(self)
+        return render_bootstrap_array_paper_text(self)
+
+    def __format__(self, spec: str) -> str:
+        if spec == "":
+            return str(self)
+        if spec == "compact":
+            from latan.display.bootstrap import render_bootstrap_array_compact_text
+
+            return render_bootstrap_array_compact_text(self)
+        if spec == "table":
+            from latan.display.bootstrap import render_bootstrap_array_text
+
+            return render_bootstrap_array_text(self)
+        if spec == "paper":
+            from latan.display.bootstrap import render_bootstrap_array_paper_text
+
+            return render_bootstrap_array_paper_text(self)
+        raise ValueError(f"unknown BootstrapArray format specifier: {spec!r}")
 
     def _repr_html_(self) -> str:
         from latan.display.bootstrap import render_bootstrap_array_html

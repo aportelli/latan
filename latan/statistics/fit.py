@@ -59,7 +59,7 @@ class FitResult[T: npt.NDArray]:
             return self.parameter_names
         return tuple(f"p_{i}" for i in range(self.n_model_parameters))
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         msg = "Fit summary\n"
         if isinstance(self.parameters, BootstrapArray):
             mean = self.parameters.central

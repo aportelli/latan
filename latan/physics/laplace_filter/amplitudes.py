@@ -32,7 +32,7 @@ class LaplaceFilterAmplitudes[T: npt.NDArray]:
     dof: int
     cdr: float
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         msg = "Laplace-filter amplitudes\n"
         if isinstance(self.amplitudes, BootstrapArray):
             amplitudes = self.amplitudes.central

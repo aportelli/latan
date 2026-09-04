@@ -60,7 +60,7 @@ class LaplaceFilterEnergies[T: npt.NDArray]:
     dof: int
     cdr: float
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         msg = "Laplace-filter spectrum\n"
         if isinstance(self.energies, BootstrapArray):
             energies = self.energies.central

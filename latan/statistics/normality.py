@@ -32,7 +32,7 @@ class NormalityTest:
         """Whether the tested observable is scalar."""
         return not self.observable_shape
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         labels = (
             ["Value"]
             if self.is_scalar
