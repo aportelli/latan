@@ -2,7 +2,7 @@
 name = "latan"
 authors = [{ name = "Antonin Portelli", email = "antonin.portelli@me.com" }]
 license = "GPL-3.0-or-later"
-version = "2026.7.0"
+version = "2026.9.0.rc1"
 description = "Statistical data analysis library for lattice field theory"
 readme = "README.md"
 requires-python = ">=3.12"
