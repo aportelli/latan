@@ -4,8 +4,8 @@ from typing import TYPE_CHECKING
 import numpy.typing as npt
 
 from latan.display._common import (
-    bootstrap_error_html,
     bootstrap_normality,
+    bootstrap_value_html,
     non_gaussian_html,
     normality_css,
     p_value_colour,
@@ -18,12 +18,13 @@ if TYPE_CHECKING:
 
 def _parameter_normality_html(
     value: float,
+    error: float,
     lower: float,
     upper: float,
     non_gaussian: bool,
     p_value: float,
 ) -> tuple[str, str]:
-    errors = (("err", upper - value, value - lower),) if non_gaussian else ()
+    errors = (("err", error, upper - value, value - lower),) if non_gaussian else ()
     return non_gaussian_html(p_value, errors)
 
 
@@ -39,8 +40,7 @@ def render_fit_result_html[T: npt.NDArray](result: "FitResult[T]") -> str:
         parameter_rows = "".join(
             "<tr>"
             f"<td>{escape(name)}</td>"
-            f"<td>{value:.4g}</td>"
-            f"{bootstrap_error_html(error, *_parameter_normality_html(value, lo, hi, ng, normal_p))}"
+            f"{bootstrap_value_html(value, error, *_parameter_normality_html(value, error, lo, hi, ng, normal_p))}"
             "</tr>"
             for name, value, error, lo, hi, ng, normal_p in zip(
                 result._display_parameter_names,
@@ -52,7 +52,7 @@ def render_fit_result_html[T: npt.NDArray](result: "FitResult[T]") -> str:
                 normality_p,
             )
         )
-        parameter_header = "<th>Name</th><th>Value</th><th>Std</th>"
+        parameter_header = "<th>Name</th><th>Value</th>"
     else:
         parameter_rows = "".join(
             f"<tr><td>{escape(name)}</td><td>{value:.4g}</td></tr>"

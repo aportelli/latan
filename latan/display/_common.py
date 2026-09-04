@@ -1,3 +1,5 @@
+from math import floor
+
 import numpy as np
 import numpy.typing as npt
 from scipy import stats
@@ -46,12 +48,46 @@ def bootstrap_normality(
     return lower, upper, non_gaussian, p_value
 
 
-def bootstrap_error_html(
+def bootstrap_value_text(value: float, error: float) -> str:
+    """Format a value with its standard uncertainty in parentheses."""
+    if not np.isfinite(value) or not np.isfinite(error) or error <= 0:
+        return f"{value:.4g} ± {error:.4g}"
+    precision = _bootstrap_error_precision(error)
+    assert precision is not None
+    place, n_digits = precision
+    uncertainty = round(error / 10**place)
+    if uncertainty == 10**n_digits:
+        place += 1
+        uncertainty = round(error / 10**place)
+    return f"{value:.{max(0, -place)}f}({uncertainty})"
+
+
+def _bootstrap_error_precision(error: float) -> tuple[int, int] | None:
+    if not np.isfinite(error) or error <= 0:
+        return None
+    exponent = floor(np.log10(error))
+    n_digits = 2 if error / 10**exponent < 3 else 1
+    return exponent - n_digits + 1, n_digits
+
+
+def bootstrap_asymmetric_error_text(
+    error: float, upper: float, lower: float
+) -> tuple[str, str]:
+    """Format asymmetric errors at the precision of a standard uncertainty."""
+    precision = _bootstrap_error_precision(error)
+    if precision is None:
+        return f"+{upper:.4g}", f"−{lower:.4g}"
+    place, _ = precision
+    return f"+{round(upper / 10**place)}", f"−{round(lower / 10**place)}"
+
+
+def bootstrap_value_html(
+    value: float,
     error: float,
     attributes: str = "",
     annotation: str = "",
 ) -> str:
-    return f"<td{attributes}>{error:.4g}{annotation}</td>"
+    return f"<td{attributes}>{bootstrap_value_text(value, error)}{annotation}</td>"
 
 
 def bootstrap_error_text(
@@ -68,7 +104,7 @@ def asymmetric_error_text(value: float, lower: float, upper: float, label: str =
 
 def non_gaussian_html(
     p_values: npt.ArrayLike,
-    errors: tuple[tuple[str, float, float], ...] = (),
+    errors: tuple[tuple[str, float, float, float], ...] = (),
 ) -> tuple[str, str]:
     p_values = np.asarray(p_values)
     flagged = p_values[p_values < NORMALITY_P_THRESHOLD]
@@ -76,16 +112,16 @@ def non_gaussian_html(
         return "", ""
     _, colour = p_value_colour(float(flagged.min()))
     items = "&nbsp;&amp;&nbsp;".join(
-        f'<span class="latan-ng-item">{label} =&nbsp;'
+        f'<span class="latan-ng-item">{label}&nbsp;('
         f'<small style="display:inline-block;vertical-align:middle;'
         'line-height:0.85;text-align:left">'
-        f'<span style="display:block">+{upper:.4g}</span>'
-        f'<span style="display:block">−{lower:.4g}</span>'
-        "</small></span>"
-        for label, upper, lower in errors
+        f'<span style="display:block">{bootstrap_asymmetric_error_text(error, upper, lower)[0]}</span>'
+        f'<span style="display:block">{bootstrap_asymmetric_error_text(error, upper, lower)[1]}</span>'
+        "</small>)</span>"
+        for label, error, upper, lower in errors
     )
     annotation = f'<span class="latan-ng" style="--latan-ng-colour:{colour}">'
-    annotation += f"<b>NN</b> ({items})</span>"
+    annotation += f"<b>NN</b> {items}</span>"
     return ' class="latan-ng-holder"', annotation
 
 

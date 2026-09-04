@@ -1,5 +1,4 @@
 from html import escape
-from math import floor
 from typing import Any, cast
 
 import numpy as np
@@ -7,8 +6,9 @@ import numpy as np
 from latan.display._common import (
     _component_labels,
     asymmetric_error_text,
-    bootstrap_error_html,
     bootstrap_normality,
+    bootstrap_value_html,
+    bootstrap_value_text,
     non_gaussian_html,
     non_gaussian_text,
     normality_css,
@@ -40,29 +40,15 @@ def render_bootstrap_array_compact_text(data: BootstrapArray) -> str:
     return f"{central} ± {error}"
 
 
-def _paper_value(value: float, error: float) -> str:
-    if not np.isfinite(value) or not np.isfinite(error) or error <= 0:
-        return f"{value:.4g} ± {error:.4g}"
-    exponent = floor(np.log10(error))
-    n_digits = 2 if error / 10**exponent < 3 else 1
-    place = exponent - n_digits + 1
-    uncertainty = round(error / 10**place)
-    if uncertainty == 10**n_digits:
-        place += 1
-        uncertainty = round(error / 10**place)
-    decimals = max(0, -place)
-    return f"{value:.{decimals}f}({uncertainty})"
-
-
 def render_bootstrap_array_paper_text(data: BootstrapArray) -> str:
     """Render values using parenthesized standard uncertainties."""
     central = data.central
     error = data.error()
     if central.size == 1:
-        return _paper_value(central.item(), error.item())
+        return bootstrap_value_text(central.item(), error.item())
     values = np.empty(central.shape, dtype=object)
     for index in np.ndindex(central.shape):
-        values[index] = _paper_value(central[index], error[index])
+        values[index] = bootstrap_value_text(central[index], error[index])
     return np.array2string(values, formatter={"all": str})
 
 
@@ -141,7 +127,7 @@ def render_bootstrap_array_html(data: BootstrapArray) -> str:
         else:
             lower, upper, non_gaussian, p_value = diagnostic
             asymmetry = (
-                (("err", float(upper - value), float(value - lower)),)
+                (("err", float(std), float(upper - value), float(value - lower)),)
                 if non_gaussian
                 else ()
             )
@@ -149,15 +135,14 @@ def render_bootstrap_array_html(data: BootstrapArray) -> str:
         rows += (
             "<tr>"
             f"<td>{escape(label)}</td>"
-            f"<td>{value:.4g}</td>"
-            f"{bootstrap_error_html(float(std), attributes, annotation)}"
+            f"{bootstrap_value_html(float(value), float(std), attributes, annotation)}"
             "</tr>"
         )
     return f"""
         {normality_css()}
         <table style="margin-right:16em">
-          <tr><th colspan="3" style="text-align:center">Bootstrap array: {data.samples.shape[0]} samples</th></tr>
-          <tr><th>Component</th><th>Value</th><th>Std</th></tr>
+          <tr><th colspan="2" style="text-align:center">Bootstrap array: {data.samples.shape[0]} samples</th></tr>
+          <tr><th>Component</th><th>Value</th></tr>
           {rows}
         </table>
     """
