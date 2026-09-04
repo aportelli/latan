@@ -19,6 +19,26 @@ def eff_mass_cosh(c: npt.NDArray | BootstrapArray) -> npt.NDArray | BootstrapArr
 
 
 @overload
+def eff_mass_cosh_correction(
+    c: BootstrapArray, dc: BootstrapArray
+) -> BootstrapArray: ...
+
+
+@overload
+def eff_mass_cosh_correction(c: npt.NDArray, dc: npt.NDArray) -> npt.NDArray: ...
+
+
+def eff_mass_cosh_correction(
+    c: npt.NDArray | BootstrapArray, dc: npt.NDArray | BootstrapArray
+) -> npt.NDArray | BootstrapArray:
+    c_ratio = (c[..., 0:-2] + c[..., 2:]) / (2.0 * c[..., 1:-1])
+    dc_ratio = (dc[..., 0:-2] + dc[..., 2:]) / (2.0 * c[..., 1:-1])
+    return (dc_ratio - dc[..., 1:-1] * c_ratio / c[..., 1:-1]) / np.sqrt(
+        c_ratio**2 - 1.0
+    )
+
+
+@overload
 def eff_mass_log(c: BootstrapArray) -> BootstrapArray: ...
 
 

@@ -1,6 +1,10 @@
 from latan.physics.effective_mass import (
     eff_mass_cosh,
+    eff_mass_cosh_correction,
     eff_mass_log,
+)
+from latan.physics.fold import (
+    fold,
 )
 from latan.physics.gevp import (
     gevp,
@@ -10,6 +14,7 @@ from latan.physics.laplace_filter import (
     LaplaceFilteredT2,
     LaplaceFilterEnergies,
     LaplaceFilterSpectrumTest,
+    filter_excited,
     lfilter,
     lfilter_amplitudes,
     lfilter_correlated_data,
@@ -28,7 +33,10 @@ __all__ = [
     "LaplaceFilterSpectrumTest",
     "LaplaceFilteredT2",
     "eff_mass_cosh",
+    "eff_mass_cosh_correction",
     "eff_mass_log",
+    "filter_excited",
+    "fold",
     "gevp",
     "lfilter",
     "lfilter_amplitudes",
