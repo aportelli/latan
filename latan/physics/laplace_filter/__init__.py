@@ -21,6 +21,9 @@ from latan.physics.laplace_filter.spectrum import (
     lfilter_spectrum,
     lfilter_spectrum_test,
 )
+from latan.physics.laplace_filter.excited import (
+    filter_excited,
+)
 from latan.physics.laplace_filter.t2 import (
     LaplaceFilteredT2,
 )
@@ -30,6 +33,7 @@ __all__ = [
     "LaplaceFilterEnergies",
     "LaplaceFilterSpectrumTest",
     "LaplaceFilteredT2",
+    "filter_excited",
     "lfilter",
     "lfilter_amplitudes",
     "lfilter_correlated_data",
