@@ -84,8 +84,8 @@ class TestChi2(unittest.TestCase):
         bootstrap = latan.BootstrapArray(
             np.vstack((y, y + rng.normal(scale=0.05, size=(12, y.size))))
         )
-        data = latan.XYData(
-            latan.CorrelatedData.from_bootstrap(bootstrap), x=[x], y_indices=[0]
+        data = latan.XYBootstrapData(
+            latan.CorrelatedBootstrapData(bootstrap), x=[x], y_indices=[0]
         )
         model = latan.Model(
             lambda values, parameters: parameters[..., 0]

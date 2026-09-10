@@ -1,10 +1,11 @@
 from collections.abc import Sequence
 from numbers import Integral, Real
+from typing import override
 
 import numpy as np
 import numpy.typing as npt
 
-from latan.statistics.correlated_data import CorrelatedData
+from latan.statistics.correlated_data import CorrelatedBootstrapData, CorrelatedData
 
 
 class XYData:
@@ -277,3 +278,33 @@ class XYData:
         if not np.any(mask):
             raise ValueError("point selection is empty")
         return mask
+
+
+class XYBootstrapData(XYData):
+    """X/y data backed by correlated bootstrap quantities."""
+
+    _data: CorrelatedBootstrapData
+
+    def __init__(
+        self,
+        data: CorrelatedBootstrapData,
+        x: Sequence[int | npt.NDArray],
+        y_indices: Sequence[int],
+        *,
+        x_map: Sequence[int | npt.NDArray | None] | None = None,
+        x_names: Sequence[str] | None = None,
+        y_names: Sequence[str] | None = None,
+    ) -> None:
+        super().__init__(
+            data,
+            x,
+            y_indices,
+            x_map=x_map,
+            x_names=x_names,
+            y_names=y_names,
+        )
+
+    @property
+    @override
+    def data(self) -> CorrelatedBootstrapData:
+        return self._data

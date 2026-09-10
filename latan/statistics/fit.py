@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from functools import partial
-from typing import Literal, cast
+from typing import Literal, cast, overload
 
 import numpy as np
 import numpy.typing as npt
@@ -23,7 +23,7 @@ from latan.statistics.bootstrap import BootstrapArray
 from latan.statistics.chi2 import Chi2, PointRanges
 from latan.statistics.correlation import cdr
 from latan.statistics.model import Model
-from latan.statistics.xy_data import XYData
+from latan.statistics.xy_data import XYBootstrapData, XYData
 
 
 @dataclass
@@ -145,11 +145,9 @@ def _fit_batch(
 
 # helper validating and extracting bootstrap samples
 def _bootstrap_samples(
-    data: XYData,
+    data: XYBootstrapData,
 ) -> list[npt.NDArray]:
     bootstrap = data.data.bootstrap
-    if bootstrap is None:
-        raise ValueError("data does not contain bootstrap replicas")
     n_samples = bootstrap[0].samples.shape[0]
     samples: list[npt.NDArray] = []
     for i, item in enumerate(bootstrap):
@@ -167,6 +165,34 @@ def _bootstrap_samples(
     return samples
 
 
+@overload
+def fit(
+    data: XYBootstrapData,
+    model: Model,
+    p0: npt.NDArray,
+    *,
+    include: PointRanges | None = None,
+    exclude: PointRanges | None = None,
+    ncall: int = 5000,
+    workers: int = 1,
+    covariance: Literal["full", "diagonal"] = "full",
+) -> FitResult[BootstrapArray]: ...
+
+
+@overload
+def fit(
+    data: XYData,
+    model: Model,
+    p0: npt.NDArray,
+    *,
+    include: PointRanges | None = None,
+    exclude: PointRanges | None = None,
+    ncall: int = 5000,
+    workers: int = 1,
+    covariance: Literal["full", "diagonal"] = "full",
+) -> FitResult[npt.NDArray]: ...
+
+
 def fit(
     data: XYData,
     model: Model,
@@ -181,12 +207,12 @@ def fit(
     """Fit a model to correlated x/y data.
 
     A cheap uncorrelated fit with observed x values fixed preconditions the
-    requested fit. When `data` retains bootstrap replicas, the central
-    covariance remains fixed while every aligned sample is fitted.
+    requested fit. `XYBootstrapData` fits its bootstrap quantities while
+    keeping its central covariance fixed.
 
     Args:
-        data: Pointwise x/y data, central covariance, and optional retained
-            bootstrap replicas.
+        data: Pointwise x/y data. `XYBootstrapData` triggers bootstrap fits;
+            `XYData` produces only the central fit.
         model: Model relating x coordinates to y coordinates.
         p0: Initial physical model parameters.
         include: One closed `(low, high)` value interval per x coordinate.
@@ -240,7 +266,7 @@ def fit(
     )
 
     # if fit is not bootstrapped we are done
-    if data.data.bootstrap is None:
+    if not isinstance(data, XYBootstrapData):
         return central_result
 
     # if bootstrapped do potentially parallel loop on bootstrap samples

@@ -3,7 +3,8 @@ import numpy as np
 import numpy.typing as npt
 
 from latan.physics.laplace_filter.filter import lfilter_correlated_data
-from latan.statistics.correlated_data import CorrelatedData
+from latan.statistics.bootstrap import BootstrapArray
+from latan.statistics.correlated_data import CorrelatedBootstrapData, CorrelatedData
 from latan.statistics.correlation import cov_quadratic_form
 
 
@@ -35,12 +36,18 @@ class LaplaceFilteredT2:
             )
         self._data = data
         self._ranges = list(ranges)
-        mean_buf = [np.empty_like(data.mean(i)) for i in range(data.n_quantities)]
-        cov_buf = [
-            [np.zeros_like(data.cov(i, j)) for j in range(i, data.n_quantities)]
-            for i in range(data.n_quantities)
-        ]
-        self._filtered_data = CorrelatedData(mean_buf, cov_buf)
+        if isinstance(data, CorrelatedBootstrapData):
+            bootstrap = data.bootstrap
+            self._filtered_data = CorrelatedBootstrapData(
+                [BootstrapArray(np.zeros_like(item)) for item in bootstrap]
+            )
+        else:
+            mean_buf = [np.empty_like(data.mean(i)) for i in range(data.n_quantities)]
+            cov_buf = [
+                [np.zeros_like(data.cov(i, j)) for j in range(i, data.n_quantities)]
+                for i in range(data.n_quantities)
+            ]
+            self._filtered_data = CorrelatedData(mean_buf, cov_buf)
 
     @property
     def ranges(self) -> tuple[tuple[int, int], ...]:

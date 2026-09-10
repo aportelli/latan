@@ -8,6 +8,7 @@ from latan.statistics.chi2 import (
     Chi2,
 )
 from latan.statistics.correlated_data import (
+    CorrelatedBootstrapData,
     CorrelatedData,
 )
 from latan.statistics.correlation import (
@@ -34,6 +35,7 @@ from latan.statistics.normality import (
     normality_test,
 )
 from latan.statistics.xy_data import (
+    XYBootstrapData,
     XYData,
 )
 
@@ -41,12 +43,14 @@ __all__ = [
     "Bootstrap",
     "BootstrapArray",
     "Chi2",
+    "CorrelatedBootstrapData",
     "CorrelatedData",
     "FitResult",
     "Model",
     "NonparametricBootstrap",
     "NormalityTest",
     "ParametricGaussianBootstrap",
+    "XYBootstrapData",
     "XYData",
     "cdr",
     "corr_to_cov",
