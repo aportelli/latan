@@ -19,7 +19,12 @@ from latan.statistics.bootstrap import BootstrapArray
 def _normality(
     data: BootstrapArray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None:
-    if data.samples.shape[0] < 8 or not np.isrealobj(data):
+    if (
+        data.samples.shape[0] < 8
+        or not np.isrealobj(data)
+        or not np.isfinite(data.error()).all()
+        or not (data.error() > 0).any()
+    ):
         return None
     return bootstrap_normality(data)
 

@@ -105,25 +105,31 @@ def normality_test(data: npt.ArrayLike | BootstrapArray) -> NormalityTest:
     values = samples.reshape(n_samples, -1)
     mean = values.mean(axis=0)
     scale = values.std(axis=0, ddof=1)
-    normaltest = stats.normaltest(values, axis=0)
-    qq_observed = np.sort((values - mean) / scale, axis=0).reshape(
-        n_samples, *observable_shape
-    )
+    valid = np.isfinite(values).all(axis=0) & np.isfinite(scale) & (scale > 0)
+    skewness = np.full(values.shape[1], np.nan)
+    kurtosis_excess = np.full(values.shape[1], np.nan)
+    reduced_statistic = np.full(values.shape[1], np.nan)
+    p_value = np.full(values.shape[1], np.nan)
+    qq_observed = np.zeros_like(values)
+    if valid.any():
+        normaltest = stats.normaltest(values[:, valid], axis=0)
+        skewness[valid] = stats.skew(values[:, valid], axis=0, bias=False)
+        kurtosis_excess[valid] = stats.kurtosis(values[:, valid], axis=0, bias=False)
+        reduced_statistic[valid] = np.asarray(normaltest.statistic) / 2
+        p_value[valid] = normaltest.pvalue
+        qq_observed[:, valid] = np.sort(
+            (values[:, valid] - mean[valid]) / scale[valid], axis=0
+        )
+    qq_observed = qq_observed.reshape(n_samples, *observable_shape)
     qq_theoretical = stats.norm.ppf((np.arange(n_samples) + 0.5) / n_samples)
 
     return NormalityTest(
         n_samples=n_samples,
         observable_shape=observable_shape,
-        skewness=np.asarray(stats.skew(values, axis=0, bias=False)).reshape(
-            observable_shape
-        ),
-        kurtosis_excess=np.asarray(
-            stats.kurtosis(values, axis=0, bias=False)
-        ).reshape(observable_shape),
-        reduced_statistic=(np.asarray(normaltest.statistic) / 2).reshape(
-            observable_shape
-        ),
-        p_value=np.asarray(normaltest.pvalue).reshape(observable_shape),
+        skewness=skewness.reshape(observable_shape),
+        kurtosis_excess=kurtosis_excess.reshape(observable_shape),
+        reduced_statistic=reduced_statistic.reshape(observable_shape),
+        p_value=p_value.reshape(observable_shape),
         qq_theoretical=qq_theoretical,
         qq_observed=qq_observed,
     )

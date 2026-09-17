@@ -87,6 +87,8 @@ def _qq_plot(result: "NormalityTest", labels: list[str], width: int) -> str:
 
 
 def _p_value_cell(p_value: float) -> str:
+    if not np.isfinite(p_value):
+        return "<td>N/A</td>"
     significance, colour = p_value_colour(p_value)
     return (
         f'<td style="background-color:{colour};color:black">'
