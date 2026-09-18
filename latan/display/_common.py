@@ -50,6 +50,8 @@ def bootstrap_normality(
 
 def bootstrap_value_text(value: float, error: float) -> str:
     """Format a value with its standard uncertainty in parentheses."""
+    if value == 0 and error == 0:
+        return "0(0)"
     if not np.isfinite(value) or not np.isfinite(error) or error <= 0:
         return f"{value:.4g} ± {error:.4g}"
     precision = _bootstrap_error_precision(error)
