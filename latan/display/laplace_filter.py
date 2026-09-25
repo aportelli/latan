@@ -140,8 +140,11 @@ def render_laplace_filter_amplitudes_html[T: npt.NDArray](
         errors = result.amplitudes.error()
         lower, upper, non_gaussian, normality_p = bootstrap_normality(result.amplitudes)
         rows = "".join(
-            "<tr>"
-            f"<td>A<sub>{','.join(str(i) for i in index)}</sub></td>"
+            "<tr>" + (
+                f"<td>{result._label(index)}</td>"
+                if result.linear_corrections
+                else f"<td>A<sub>{','.join(str(i) for i in index)}</sub></td>"
+            )
             + bootstrap_value_html(
                 float(amplitudes[index]),
                 float(errors[index]),
@@ -166,10 +169,13 @@ def render_laplace_filter_amplitudes_html[T: npt.NDArray](
     else:
         amplitudes = result.amplitudes
         rows = "".join(
-            "<tr>"
-            f"<td>A<sub>{','.join(str(i) for i in index)}</sub></td>"
-            f"<td>{float(amplitudes[index]):.4g}</td>"
-            "</tr>"
+            "<tr>" + (
+                f"<td>{result._label(index)}</td>"
+                if result.linear_corrections
+                else f"<td>A<sub>{','.join(str(i) for i in index)}</sub></td>"
+            )
+            + f"<td>{float(amplitudes[index]):.4g}</td>"
+            + "</tr>"
             for index in np.ndindex(amplitudes.shape)
         )
         header = "<th>Amplitude</th><th>Value</th>"

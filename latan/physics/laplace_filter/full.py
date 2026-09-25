@@ -99,7 +99,7 @@ def lfilter_full_spectrum(
     amplitudes = lfilter_amplitudes(
         data,
         (fit_ti, tf),
-        energies.lambdas,
+        energies.energies,
         amplitude_lambda=la,
         time_period=time_period,
     )
